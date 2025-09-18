@@ -1,31 +1,20 @@
 PODS:
-  - Armchair (0.3.0)
-  - Crashlytics (3.8.5):
-    - Fabric (~> 1.6.3)
-  - Fabric (1.6.12)
   - FAPaginationLayout (0.0.4)
-  - Flurry-iOS-SDK/FlurrySDK (8.1.0)
-  - Google-Mobile-Ads-SDK (7.22.0)
-  - SnapKit (3.2.0)
+  - SnapKit (5.7.1)
 
 DEPENDENCIES:
-  - Armchair
-  - Crashlytics
-  - Fabric
   - FAPaginationLayout
-  - Flurry-iOS-SDK/FlurrySDK
-  - Google-Mobile-Ads-SDK
-  - SnapKit (~> 3.2.0)
+  - SnapKit (~> 5.7.0)
+
+SPEC REPOS:
+  trunk:
+    - FAPaginationLayout
+    - SnapKit
 
 SPEC CHECKSUMS:
-  Armchair: c8eca9bdca868fd6f7155eee73ba70a1278b0655
-  Crashlytics: dfbae35ef22ca189240d230ad501feea4ee85d2d
-  Fabric: f050464eac45a2ce5a8e6e6a07e977c0df32fe28
   FAPaginationLayout: 4dbd7e2907a6202dddb5fe714d4f7396e58299b3
-  Flurry-iOS-SDK: 51065be4436f3e21fc8d3d7bb0b7d6869df6333d
-  Google-Mobile-Ads-SDK: 1bdf1a4244d0553b1840239874c209c01aef055f
-  SnapKit: 1ca44df72cfa543218d177cb8aab029d10d86ea7
+  SnapKit: d612e99e678a2d3b95bf60b0705ed0a35c03484a
 
-PODFILE CHECKSUM: 0f93be8d39fcbfa9d013ad886c29776bb2ec1c57
+PODFILE CHECKSUM: 8f980f43bbedf935b0cf808f50943c470963aa46
 
-COCOAPODS: 1.2.1
+COCOAPODS: 1.16.2

@@ -8,7 +8,6 @@
 
 import UIKit
 import SpriteKit
-import Crashlytics
 
 enum StationType: Int {
     case ketchup = 2 //default level 2
@@ -41,7 +40,6 @@ class Station: SKSpriteNode {
     var stationType = StationType.ketchup {
         didSet {
             self.texture = SKTexture(imageNamed: stationType.name)
-            CLSLogv("Station type didSet", getVaList([]))
         }
     }
     var isShooting = false
@@ -79,7 +77,6 @@ class Station: SKSpriteNode {
     }
     
     func shootSauce() {
-        CLSLogv("shootSauce is called", getVaList([]))
         isShooting = true
         let sauce = Sauce(type: stationType)
         addChild(sauce)

@@ -10,7 +10,6 @@ import SpriteKit
 import GameplayKit
 import SnapKit
 import AVFoundation
-import Crashlytics
 
 protocol GameSceneDelegate: class {
     func gameSceneGameEnded()
@@ -99,10 +98,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     override func didMove(to view: SKView) {
         super.didMove(to: view)
         highest.fontColor = hasInternet ? UIColor.white : UIColor.red
-        CLSLogv("Game Scene did move to view", getVaList([]))
 
         if !isGameOver {
-            CLSLogv("Game is not over, so re create the entire scene", getVaList([]))
             self.physicsWorld.contactDelegate = self
             self.physicsWorld.gravity = CGVector(dx: 0.0, dy: -9.8)
             createBackground()
@@ -151,7 +148,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     
     
     func resetGameScene() {
-        CLSLogv("Reset Game", getVaList([]))
         removeAllChildren()
         paths.removeAll()
         stations.removeAll()
@@ -175,7 +171,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     func createBackground() {
-        CLSLogv("Creating Background", getVaList([]))
 
         for i in 0 ... 1 {
             background = SKSpriteNode(texture: SKTexture(imageNamed: "background_second"))
@@ -226,9 +221,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         
 
         hotdog = Hotdog(hotdogType: Hotdog.HotdogType(rawValue: UserDefaults.standard.integer(forKey: "UserDefaultsSelectCharacterKey"))!)
-        
-        CLSLogv("Creating Hotdog: %@", getVaList([hotdog.hotdogType.name]))
-        
+                
         hotdog.zPosition = 30
         hotdog.position = CGPoint(x: self.frame.size.width/2.0, y: hotdog.size.height/2.0)
         hotdog.physicsBody?.categoryBitMask = ContactCategory.hotdog.rawValue
@@ -275,7 +268,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     func setupPaths() {
-        CLSLogv("Setting Up Paths", getVaList([]))
         generatePaths()
         for path in paths {
             path.physicsBody?.categoryBitMask = ContactCategory.path.rawValue
@@ -364,7 +356,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     func createStation() {
-        CLSLogv("Creating Station", getVaList([]))
         // generates
         for i in 0...2 {
             let station = Station()
@@ -418,7 +409,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     // ====================================================================================================
     
     func gameOver() {
-        CLSLogv("Game is over, game scene delegate called", getVaList([]))
         isGameOver = true // needs to set this first to prevent updating getting called again
         if isSoundEffectOn {
             run(fallingSound)
@@ -511,7 +501,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             }
             let diff = CGVector(dx: 0, dy: CGFloat(kMinJumpHeight + 5))
             if isLanded {
-                CLSLogv("User tap to jump", getVaList([]))
                 hotdog.physicsBody?.applyImpulse(diff)
                 if isSoundEffectOn {
                     run(jumpSound)

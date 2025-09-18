@@ -4,69 +4,43 @@
 <dict>
 	<key>SchemeUserState</key>
 	<dict>
-		<key>Armchair.xcscheme</key>
-		<dict>
-			<key>isShown</key>
-			<false/>
-		</dict>
 		<key>FAPaginationLayout.xcscheme</key>
 		<dict>
 			<key>isShown</key>
 			<false/>
-		</dict>
-		<key>Flurry-iOS-SDK.xcscheme</key>
-		<dict>
-			<key>isShown</key>
-			<false/>
+			<key>orderHint</key>
+			<integer>0</integer>
 		</dict>
 		<key>Pods-HotdogUp.xcscheme</key>
 		<dict>
 			<key>isShown</key>
 			<false/>
+			<key>orderHint</key>
+			<integer>1</integer>
 		</dict>
 		<key>Pods-HotdogUpTests.xcscheme</key>
 		<dict>
 			<key>isShown</key>
 			<false/>
+			<key>orderHint</key>
+			<integer>2</integer>
+		</dict>
+		<key>SnapKit-SnapKit_Privacy.xcscheme</key>
+		<dict>
+			<key>isShown</key>
+			<false/>
+			<key>orderHint</key>
+			<integer>4</integer>
 		</dict>
 		<key>SnapKit.xcscheme</key>
 		<dict>
 			<key>isShown</key>
 			<false/>
+			<key>orderHint</key>
+			<integer>3</integer>
 		</dict>
 	</dict>
 	<key>SuppressBuildableAutocreation</key>
-	<dict>
-		<key>3B92B9098F7D105D586AA44FE311240D</key>
-		<dict>
-			<key>primary</key>
-			<true/>
-		</dict>
-		<key>4646576BAE3511AC833E41713263F74A</key>
-		<dict>
-			<key>primary</key>
-			<true/>
-		</dict>
-		<key>5A08AAF56F8D0D97071293CB6DF0816C</key>
-		<dict>
-			<key>primary</key>
-			<true/>
-		</dict>
-		<key>70CE69DDCE7BA0AEC2C18D4C5DD18EAD</key>
-		<dict>
-			<key>primary</key>
-			<true/>
-		</dict>
-		<key>C553D5096AF9EA377E4AC1187C6FBF77</key>
-		<dict>
-			<key>primary</key>
-			<true/>
-		</dict>
-		<key>DD761169489713624BAA52A5B69921D6</key>
-		<dict>
-			<key>primary</key>
-			<true/>
-		</dict>
-	</dict>
+	<dict/>
 </dict>
 </plist>

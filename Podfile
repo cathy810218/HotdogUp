@@ -6,14 +6,13 @@ target 'HotdogUp' do
   use_frameworks!
 
   # Pods for HotdogUp
-  # pod 'SnapKit', :git => "https://github.com/SnapKit/SnapKit.git", :branch => "swift-4"
-  pod 'SnapKit', '~> 3.2.0'
-  pod 'Google-Mobile-Ads-SDK'
-  pod 'Fabric'
-  pod 'Crashlytics'
+  pod 'SnapKit', '~> 5.7.0'
+#  pod 'Google-Mobile-Ads-SDK'
+#  pod 'Fabric'
+#  pod 'Crashlytics'
   pod 'FAPaginationLayout'
-  pod 'Armchair'
-  pod 'Flurry-iOS-SDK/FlurrySDK'
+#  pod 'Armchair', '>= 0.3'
+#  pod 'Flurry-iOS-SDK/FlurrySDK'
 
   target 'HotdogUpTests' do
     inherit! :search_paths
