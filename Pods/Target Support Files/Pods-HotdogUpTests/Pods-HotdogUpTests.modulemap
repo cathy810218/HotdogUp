@@ -1,6 +1,0 @@
-framework module Pods_HotdogUpTests {
-  umbrella header "Pods-HotdogUpTests-umbrella.h"
-
-  export *
-  module * { export * }
-}
