@@ -8,7 +8,6 @@
 
 import SpriteKit
 import GameplayKit
-import SnapKit
 import AVFoundation
 
 protocol GameSceneDelegate: AnyObject {
@@ -40,7 +39,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     var background = SKSpriteNode()
     var initialBackground = SKSpriteNode()
     
-    var scoreLabel = UILabel()
+    var scoreLabelNode = SKLabelNode()
     var highest = SKLabelNode()
     var reuseCount = 0
     var hotdogMoveVelocity: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 100.0 : 80.0
@@ -62,13 +61,13 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     var score = 0 {
         didSet {
-            scoreLabel.text = String(score)
-            if (score > UserDefaults.standard.integer(forKey: "UserDefaultsHighestScoreKey") && hasInternet) {
-                highest.text = String(score)
-                UserDefaults.standard.set(score, forKey: "UserDefaultsHighestScoreKey")
-            }
-        }
-    }
+            scoreLabelNode.text = String(score)
+             if (score > UserDefaults.standard.integer(forKey: "UserDefaultsHighestScoreKey") && hasInternet) {
+                 highest.text = String(score)
+                 UserDefaults.standard.set(score, forKey: "UserDefaultsHighestScoreKey")
+             }
+         }
+     }
     var timer = Timer()
     var timeCounter = kMinJumpHeight
     var isLanded = true
@@ -128,7 +127,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         
         score = 0
         reuseCount = 0
-        scoreLabel.text = "0"
+        scoreLabelNode.text = "0"
         
         gamePaused = false
         isGameOver = false
@@ -203,14 +202,15 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     func setupCounterLabel() {
-        self.view?.addSubview(scoreLabel)
-        scoreLabel.text = "0"
-        scoreLabel.snp.makeConstraints { (make) in
-            make.centerX.equalTo(self.view!)
-            make.top.equalTo(30)
-        }
-        scoreLabel.textColor = UIColor.white
-        scoreLabel.font = UIFont.init(name: "MarkerFelt-Wide", size: 50)
+        scoreLabelNode = SKLabelNode(fontNamed: kScoreFontName)
+        scoreLabelNode.text = "0"
+        scoreLabelNode.fontSize = kScoreFontSize
+        scoreLabelNode.fontColor = .white
+        scoreLabelNode.zPosition = 40
+        scoreLabelNode.verticalAlignmentMode = .top
+        // position near the top-center using scene coordinates
+        scoreLabelNode.position = CGPoint(x: self.frame.midX, y: self.frame.height - kScoreTopOffset)
+        addChild(scoreLabelNode)
     }
     
     override func update(_ currentTime: TimeInterval) {
@@ -258,16 +258,18 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         var lastPath = firstPath
         for _ in 0 ... 3 {
             firstPath = paths.last!
-            var x = p_randomPoint(min: Int(firstPath.size.width / 2.0),
-                                  max: Int(self.frame.size.width - firstPath.size.width))
-            
-            // if the distance between two paths (center to center) is greater than 1.5 paths
-            while abs(Int(lastPath.position.x) - x) > Int(1.65 * firstPath.size.width) {
-                x = p_randomPoint(min: Int(firstPath.size.width / 2.0),
-                                  max: Int(self.frame.size.width - firstPath.size.width))
-            }
-            
-            let y = Int(firstPath.frame.origin.y) + kMinJumpHeight + 30
+            guard let maybeFirst = paths.last else { continue }
+            firstPath = maybeFirst
+             var x = p_randomPoint(min: Int(firstPath.size.width / 2.0),
+                                   max: Int(self.frame.size.width - firstPath.size.width))
+             
+             // if the distance between two paths (center to center) is greater than 1.5 paths
+            while abs(Int(lastPath.position.x) - x) > Int(kPathGapMultiplier * firstPath.size.width) {
+                 x = p_randomPoint(min: Int(firstPath.size.width / 2.0),
+                                   max: Int(self.frame.size.width - firstPath.size.width))
+             }
+             
+            let y = Int(firstPath.frame.origin.y) + kMinJumpHeight + kPathYIncrement
             let path = Path(position: CGPoint(x: x, y: y))
             lastPath = path
             path.tag = firstPath.tag + 1
@@ -305,24 +307,27 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                      }
                  }
 
-                
-                
-                var x = p_randomPoint(min: Int(path.size.width / 2.0),
-                                      max: Int(self.frame.size.width - path.size.width))
-                
-                // if the distance between two paths (center to center) is greater than 1.8 paths
-                while abs(Int(paths.last!.position.x) - x) > Int(1.65 * path.size.width) || x <= minLeft {
+                 
+
+                 var x = p_randomPoint(min: Int(path.size.width / 2.0),
+                                       max: Int(self.frame.size.width - path.size.width))
+                 
+                 // if the distance between two paths (center to center) is greater than 1.8 paths
+                var attempts = 0
+                while (paths.last.map { abs(Int($0.position.x) - x) } ?? 0) > Int(kPathGapMultiplier * path.size.width) || x <= minLeft {
                     x = p_randomPoint(min: Int(path.size.width / 2.0),
                                       max: Int(self.frame.size.width - path.size.width))
+                    attempts += 1
+                    if attempts >= kPathMaxAttempts { break }
                 }
-                let y = Int(paths.last!.frame.origin.y) + kMinJumpHeight + 30
-                path.position = CGPoint(x: x, y: y)
-                if let idx = paths.firstIndex(of: path) {
-                    paths.remove(at: idx)
-                    paths.append(path)
-                }
-            }
-        }
+                 let y = Int(paths.last!.frame.origin.y) + kMinJumpHeight + 30
+                 path.position = CGPoint(x: x, y: y)
+                 if let idx = paths.firstIndex(of: path) {
+                     paths.remove(at: idx)
+                     paths.append(path)
+                 }
+             }
+         }
     }
     
     func createStation() {
