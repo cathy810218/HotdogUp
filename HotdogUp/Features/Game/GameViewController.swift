@@ -296,26 +296,35 @@ class GameViewController: UIViewController, GameSceneDelegate, PauseViewDelegate
     }
     
     func request(_ request: SKRequest, didFailWithError error: Error) {
-        activityIndicator.stopAnimating()
-        hasInternet = false
-        gameScene.hasInternet = false
-        let alert = UIAlertController(title: "Error", message: "Can't make payment. Please check the Internet connection.", preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
-        self.present(alert, animated: true, completion: nil)
+        // StoreKit callbacks can be invoked on a background thread; ensure UI work runs on main
+        DispatchQueue.main.async {
+            self.activityIndicator.stopAnimating()
+            self.hasInternet = false
+            self.gameScene.hasInternet = false
+            let alert = UIAlertController(title: "Error", message: "Can't make payment. Please check the Internet connection.", preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
+            self.present(alert, animated: true, completion: nil)
+        }
     }
     
     func productsRequest(_ request: SKProductsRequest, didReceive response: SKProductsResponse) {
-        hasInternet = true
-        gameScene.hasInternet = true
+        // SKProductsRequest delegate may be called off the main thread. Move UI work to main.
         let products = response.products
         if products.count == 0 {
             print("No product found")
         } else {
             product = products[0]
-            gameoverView.removeAdsBtn.isEnabled = !UserDefaults.standard.bool(forKey: "UserDefaultsPurchaseKey")
-            gameoverView.restoreIAPBtn.isEnabled = gameoverView.removeAdsBtn.isEnabled
         }
-        
+
+        DispatchQueue.main.async {
+            self.hasInternet = true
+            self.gameScene.hasInternet = true
+            if self.product != nil {
+                self.gameoverView.removeAdsBtn.isEnabled = !UserDefaults.standard.bool(forKey: "UserDefaultsPurchaseKey")
+                self.gameoverView.restoreIAPBtn.isEnabled = self.gameoverView.removeAdsBtn.isEnabled
+            }
+        }
+
         let invalids = response.invalidProductIdentifiers
         for product in invalids {
             print("product not found: \(product)")
@@ -327,20 +336,23 @@ class GameViewController: UIViewController, GameSceneDelegate, PauseViewDelegate
             switch transaction.transactionState {
             case .purchased:
                 queue.finishTransaction(transaction)
-                gameoverView.removeAdsBtn.isEnabled = false
-                gameoverView.restoreIAPBtn.isEnabled = false
+                // UI updates must run on main thread
+                DispatchQueue.main.async {
+                    self.gameoverView.removeAdsBtn.isEnabled = false
+                    self.gameoverView.restoreIAPBtn.isEnabled = false
 
-                UserDefaults.standard.set(true, forKey: "UserDefaultsPurchaseKey")
-                UserDefaults.standard.synchronize()
-//                Flurry.logEvent("User purchased RemoveAds");
-                activityIndicator.stopAnimating()
+                    UserDefaults.standard.set(true, forKey: "UserDefaultsPurchaseKey")
+                    UserDefaults.standard.synchronize()
+//                    Flurry.logEvent("User purchased RemoveAds");
+                    self.activityIndicator.stopAnimating()
+                }
                 break
             case .failed:
-                activityIndicator.stopAnimating()
                 queue.finishTransaction(transaction)
-                gameoverView.removeAdsBtn.isEnabled = true
-//                Flurry.logEvent("User failed to purchase RemoveAds");
-
+                DispatchQueue.main.async {
+                    self.activityIndicator.stopAnimating()
+                    self.gameoverView.removeAdsBtn.isEnabled = true
+                }
                 print("Failed")
                 break
             default:
@@ -352,38 +364,42 @@ class GameViewController: UIViewController, GameSceneDelegate, PauseViewDelegate
     
     
     func paymentQueue(_ queue: SKPaymentQueue, restoreCompletedTransactionsFailedWithError error: Error) {
-        activityIndicator.stopAnimating()
-        let alert = UIAlertController(title: "Restore Failed",
-                                      message: "We are unable to restore your purchase.",
-                                      preferredStyle: .alert)
-        alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
-        self.present(alert, animated: true, completion: nil)
-    }
-    
-    func paymentQueueRestoreCompletedTransactionsFinished(_ queue: SKPaymentQueue) {
-        activityIndicator.stopAnimating()
-        if queue.transactions.count == 0 {
+        DispatchQueue.main.async {
+            self.activityIndicator.stopAnimating()
             let alert = UIAlertController(title: "Restore Failed",
-                                          message: "You have not purchased RemoveAds.",
+                                          message: "We are unable to restore your purchase.",
                                           preferredStyle: .alert)
             alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
             self.present(alert, animated: true, completion: nil)
         }
-        for transaction in queue.transactions {
-            if transaction.transactionState == .restored {
-                queue.finishTransaction(transaction)
-                print("Restore")
-                gameoverView.removeAdsBtn.isEnabled = false
-                gameoverView.restoreIAPBtn.isEnabled = false
-                
-                UserDefaults.standard.set(true, forKey: "UserDefaultsPurchaseKey")
-                UserDefaults.standard.synchronize()
-                let alert = UIAlertController(title: "Restore Succeed",
-                                              message: "Ads is now removed",
+    }
+    
+    func paymentQueueRestoreCompletedTransactionsFinished(_ queue: SKPaymentQueue) {
+        DispatchQueue.main.async {
+            self.activityIndicator.stopAnimating()
+            if queue.transactions.count == 0 {
+                let alert = UIAlertController(title: "Restore Failed",
+                                              message: "You have not purchased RemoveAds.",
                                               preferredStyle: .alert)
                 alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
                 self.present(alert, animated: true, completion: nil)
-                break
+            }
+            for transaction in queue.transactions {
+                if transaction.transactionState == .restored {
+                    queue.finishTransaction(transaction)
+                    print("Restore")
+                    self.gameoverView.removeAdsBtn.isEnabled = false
+                    self.gameoverView.restoreIAPBtn.isEnabled = false
+                    
+                    UserDefaults.standard.set(true, forKey: "UserDefaultsPurchaseKey")
+                    UserDefaults.standard.synchronize()
+                    let alert = UIAlertController(title: "Restore Succeed",
+                                                  message: "Ads is now removed",
+                                                  preferredStyle: .alert)
+                    alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
+                    self.present(alert, animated: true, completion: nil)
+                    break
+                }
             }
         }
     }

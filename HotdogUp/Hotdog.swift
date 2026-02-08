@@ -30,11 +30,16 @@ class Hotdog: SKSpriteNode {
     var shotCount = 0
     init(hotdogType: HotdogType) {
         
-        hotdogTexture = SKTexture(imageNamed: "\(hotdogType.name)_11")
-        super.init(texture: hotdogTexture, color: UIColor.clear, size: (hotdogTexture?.size())!)
+        // safe texture loading
+        let textureName = "\(hotdogType.name)_11"
+        let texture = SKTexture(imageNamed: textureName)
+        hotdogTexture = texture
+        let sizeToUse = texture.size()
+        super.init(texture: hotdogTexture, color: UIColor.clear, size: sizeToUse)
         self.hotdogType = hotdogType
 //        self.physicsBody = SKPhysicsBody(rectangleOf: self.size)
-        self.physicsBody = SKPhysicsBody(rectangleOf: CGSize(width: self.size.width-20, height: self.size.height))
+        // use a slightly smaller rectangle optionally
+        self.physicsBody = SKPhysicsBody(rectangleOf: CGSize(width: max(1, self.size.width-20), height: max(1, self.size.height)))
 //        self.physicsBody = SKPhysicsBody(texture: hotdogTexture!, size: self.size)
 //        self.physicsBody = SKPhysicsBody(circleOfRadius: self.size.height/2.0)
         self.physicsBody?.mass = 0.18
