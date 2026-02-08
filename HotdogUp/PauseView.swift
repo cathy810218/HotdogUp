@@ -8,7 +8,7 @@
 
 import UIKit
 import SnapKit
-protocol PauseViewDelegate: class {
+protocol PauseViewDelegate: AnyObject {
     func pauseViewDidPressResumeButton()
     func pauseViewDidPressReplayButton()
     func pauseViewDidPressMusicButton()

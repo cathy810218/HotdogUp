@@ -41,10 +41,12 @@ class StoreViewController: UIViewController, UICollectionViewDelegate, UICollect
         collectionView.allowsSelection = true
         collectionView.backgroundColor = UIColor.clear
 //        createCTAButton()
-        let img = UIImage(named: "mrjj")!
-        let img2 = UIImage(named: "jane")!
-        let img3 = UIImage(named: "han")!
-        characterImages = [img, img2, img3]
+        // Safely load character images; skip missing assets
+        var imgs: [UIImage] = []
+        if let img = UIImage(named: "mrjj") { imgs.append(img) }
+        if let img2 = UIImage(named: "jane") { imgs.append(img2) }
+        if let img3 = UIImage(named: "han") { imgs.append(img3) }
+        characterImages = imgs
     }
     
     func createCTAButton() {

@@ -24,19 +24,17 @@ class MusicPlayer {
     class func loadBackgroundMusic() {
         let filename = "Brother_Jack.mp3"
         if !AVAudioSession.sharedInstance().isOtherAudioPlaying {
-            let url = Bundle.main.url(forResource: filename, withExtension: nil)
-            if (url == nil) {
+            guard let url = Bundle.main.url(forResource: filename, withExtension: nil) else {
                 print("Could not find file: \(filename)")
                 return
             }
             do {
-                player = try
-                    AVAudioPlayer(contentsOf: url!)
+                player = try AVAudioPlayer(contentsOf: url)
                 player.numberOfLoops = -1
                 player.prepareToPlay()
                 player.volume = 0.3
             } catch {
-                
+                print("Failed to create AVAudioPlayer: \(error)")
             }
         }
     }

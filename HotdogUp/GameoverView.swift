@@ -9,7 +9,7 @@
 import UIKit
 import SnapKit
 
-protocol GameoverViewDelegate: class {
+protocol GameoverViewDelegate: AnyObject {
     func gameoverViewDidPressShareButton()
     func gameoverViewDidPressReplayButton()
     func gameoverViewDidPressHomeButton()
@@ -32,7 +32,8 @@ class GameoverView: UIView {
 //        }
         self.backgroundColor = UIColor(hex: "#000000", alpha: 0.5)
         
-        let currentHotdogType = Hotdog.HotdogType(rawValue: UserDefaults.standard.integer(forKey: "UserDefaultsSelectCharacterKey"))!
+        let selectedRaw = UserDefaults.standard.integer(forKey: "UserDefaultsSelectCharacterKey")
+        let currentHotdogType = Hotdog.HotdogType(rawValue: selectedRaw) ?? .mrjj
         let gameoverHotdogView = UIImageView(image: UIImage(named: "\(currentHotdogType.name)_gameover"))
         let gameoverImg = UIImage(named: "gameover")
         
@@ -40,7 +41,11 @@ class GameoverView: UIView {
         self.addSubview(gameoverBackgroundView)
         gameoverBackgroundView.snp.makeConstraints { (make) in
             make.center.equalTo(self)
-            make.width.equalTo((gameoverImg?.size.width)!)
+            if let w = gameoverImg?.size.width {
+                make.width.equalTo(w)
+            } else {
+                make.width.equalTo(200)
+            }
             make.height.equalTo(gameoverHotdogView.frame.size.height * 2)
         }
         gameoverBackgroundView.layer.cornerRadius = 10.0

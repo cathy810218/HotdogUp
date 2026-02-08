@@ -66,7 +66,11 @@ class GameViewController: UIViewController, GameSceneDelegate, PauseViewDelegate
         pauseBtn.addTarget(self, action: #selector(pauseButtonDidPressed), for: .touchUpInside)
         pauseBtn.snp.makeConstraints { (make) in
             make.top.left.equalTo(30)
-            make.width.height.equalTo((pauseImg?.size.width)!)
+            if let w = pauseImg?.size.width {
+                make.width.height.equalTo(w)
+            } else {
+                make.width.height.equalTo(44)
+            }
         }
         setupTutorialView()
         SKPaymentQueue.default().add(self)
@@ -96,17 +100,18 @@ class GameViewController: UIViewController, GameSceneDelegate, PauseViewDelegate
             object: nil
         )
     }
-    
+
     func presentGameScene() {
-        skView = view as! SKView
-        if _isDebugAssertConfiguration() {
+        guard let v = view as? SKView else { return }
+        skView = v
+         if _isDebugAssertConfiguration() {
 //            skView.showsFPS = true
 //            skView.showsPhysics = true
 //            skView.showsNodeCount = true
-        }
-        skView.ignoresSiblingOrder = true
-        skView.presentScene(gameScene)
-    }
+         }
+         skView.ignoresSiblingOrder = true
+         skView.presentScene(gameScene)
+     }
     
     func setupPauseView() {
         pauseView = PauseView(frame: self.view.frame)
@@ -181,14 +186,18 @@ class GameViewController: UIViewController, GameSceneDelegate, PauseViewDelegate
     
     //Mark: GameoverViewDelegate
     func gameoverViewDidPressShareButton() {
-        let score : String = gameScene.scoreLabel.text ?? "0"
-        
-        //Generate the screenshot
-        UIGraphicsBeginImageContext(view.frame.size)
-        let context: CGContext = UIGraphicsGetCurrentContext()!
-        view.layer.render(in: context)
-        let screenshot = view.takeSnapshot()
-        socialShare(sharingText: "🌭 I just hit \(score) on HotdogUp! Beat it! 🌭\"\n\n\n", sharingImage: nil)
+        let score : String = String(gameScene.score)
+
+        // Generate the screenshot in a safe way
+        var screenshot: UIImage? = nil
+        UIGraphicsBeginImageContextWithOptions(view.bounds.size, false, UIScreen.main.scale)
+        if let context = UIGraphicsGetCurrentContext() {
+            view.layer.render(in: context)
+            screenshot = UIGraphicsGetImageFromCurrentImageContext()
+        }
+        UIGraphicsEndImageContext()
+
+        socialShare(sharingText: "🌭 I just hit \(score) on HotdogUp! Beat it! 🌭\"\n\n\n", sharingImage: screenshot)
 
 //        Flurry.logEvent("User tapped Share");
     }
@@ -289,11 +298,11 @@ class GameViewController: UIViewController, GameSceneDelegate, PauseViewDelegate
     // IAP
     func getPurchaseInfo() {
         if SKPaymentQueue.canMakePayments() {
-            requestIAP = SKProductsRequest(productIdentifiers: NSSet(object: self.productID) as! Set<String>)
-            requestIAP?.delegate = self
-            requestIAP?.start()
-        }
-    }
+            requestIAP = SKProductsRequest(productIdentifiers: Set([self.productID]))
+             requestIAP?.delegate = self
+             requestIAP?.start()
+         }
+     }
     
     func request(_ request: SKRequest, didFailWithError error: Error) {
         // StoreKit callbacks can be invoked on a background thread; ensure UI work runs on main

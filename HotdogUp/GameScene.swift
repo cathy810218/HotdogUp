@@ -257,11 +257,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         paths.append(firstPath)
         var lastPath = firstPath
         for _ in 0 ... 3 {
-            firstPath = paths.last!
+            // safely get the last path instead of force-unwrapping
             guard let maybeFirst = paths.last else { continue }
             firstPath = maybeFirst
-             var x = p_randomPoint(min: Int(firstPath.size.width / 2.0),
-                                   max: Int(self.frame.size.width - firstPath.size.width))
+              var x = p_randomPoint(min: Int(firstPath.size.width / 2.0),
+                                    max: Int(self.frame.size.width - firstPath.size.width))
              
              // if the distance between two paths (center to center) is greater than 1.5 paths
             while abs(Int(lastPath.position.x) - x) > Int(kPathGapMultiplier * firstPath.size.width) {
@@ -275,60 +275,65 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             path.tag = firstPath.tag + 1
             paths.append(path)
         }
-    }
-    
-    private func p_randomPoint(min: Int, max: Int) -> Int {
-        guard max >= min else { return min }
-        return Int.random(in: min...max)
-    }
-    
-    private func reusePath() {
-        for path in paths {
-            if path.position.y < 0 {
-                path.reset()
-                
-                var minLeft = 0
-                if path.tag == 0 {
-                    reuseCount += 1
-                }
-                if reuseCount % kNumOfStairsToUpdate == 0 { // every kNumOfStairsToUpdate * 5 stairs change the stair style
-                    let level = reuseCount / kNumOfStairsToUpdate > 4 ? 4 : reuseCount / kNumOfStairsToUpdate
-                    path.type = PathType(rawValue: level)!
-                    
-                    if level >= 2 && level < 5 {
-                        // guard stations access - if stations are not yet created this will safely fallback to 0
-                        minLeft = Int(stations.first?.size.width ?? 0)
+     }
+ 
+     private func p_randomPoint(min: Int, max: Int) -> Int {
+         guard max >= min else { return min }
+         return Int.random(in: min...max)
+     }
+ 
+     private func reusePath() {
+         for path in paths {
+             if path.position.y < 0 {
+                 path.reset()
+                 
+                 var minLeft = 0
+                 if path.tag == 0 {
+                     reuseCount += 1
+                 }
+                 if reuseCount % kNumOfStairsToUpdate == 0 { // every kNumOfStairsToUpdate * 5 stairs change the stair style
+                     let level = reuseCount / kNumOfStairsToUpdate > 4 ? 4 : reuseCount / kNumOfStairsToUpdate
+                     if let newType = PathType(rawValue: level) {
+                         path.type = newType
+                     }
+                     
+                     if level >= 2 && level < 5 {
+                         // guard stations access - if stations are not yet created this will safely fallback to 0
+                         minLeft = Int(stations.first?.size.width ?? 0)
                          if path.tag >= 3 {
                              stations.forEach({ (station) in
                                  station.isHidden = false
-                                 station.stationType = StationType(rawValue: level)!
+                                 if let sType = StationType(rawValue: level) {
+                                     station.stationType = sType
+                                 }
                              })
                          }
                      }
                  }
 
-                 
+                  
 
-                 var x = p_randomPoint(min: Int(path.size.width / 2.0),
+                  var x = p_randomPoint(min: Int(path.size.width / 2.0),
+                                        max: Int(self.frame.size.width - path.size.width))
+                  
+                  // if the distance between two paths (center to center) is greater than 1.8 paths
+                 var attempts = 0
+                 while (paths.last.map { abs(Int($0.position.x) - x) } ?? 0) > Int(kPathGapMultiplier * path.size.width) || x <= minLeft {
+                     x = p_randomPoint(min: Int(path.size.width / 2.0),
                                        max: Int(self.frame.size.width - path.size.width))
-                 
-                 // if the distance between two paths (center to center) is greater than 1.8 paths
-                var attempts = 0
-                while (paths.last.map { abs(Int($0.position.x) - x) } ?? 0) > Int(kPathGapMultiplier * path.size.width) || x <= minLeft {
-                    x = p_randomPoint(min: Int(path.size.width / 2.0),
-                                      max: Int(self.frame.size.width - path.size.width))
-                    attempts += 1
-                    if attempts >= kPathMaxAttempts { break }
-                }
-                 let y = Int(paths.last!.frame.origin.y) + kMinJumpHeight + 30
-                 path.position = CGPoint(x: x, y: y)
-                 if let idx = paths.firstIndex(of: path) {
-                     paths.remove(at: idx)
-                     paths.append(path)
+                     attempts += 1
+                     if attempts >= kPathMaxAttempts { break }
                  }
-             }
-         }
-    }
+                 guard let last = paths.last else { continue }
+                 let y = Int(last.frame.origin.y) + kMinJumpHeight + 30
+                  path.position = CGPoint(x: x, y: y)
+                  if let idx = paths.firstIndex(of: path) {
+                      paths.remove(at: idx)
+                      paths.append(path)
+                  }
+              }
+          }
+     }
     
     func createStation() {
         // generates
