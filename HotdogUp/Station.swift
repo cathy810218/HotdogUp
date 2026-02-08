@@ -79,9 +79,11 @@ class Station: SKSpriteNode {
     func shootSauce() {
         isShooting = true
         let sauce = Sauce(type: stationType)
-        addChild(sauce)
+        // spawn sauce in scene coordinate space so it behaves independently
         sauce.zPosition = -1
-        sauce.position = CGPoint(x: sauce.size.width/2.0 - 5, y: 0)
+        sauce.position = self.convert(CGPoint(x: sauce.size.width/2.0 - 5, y: 0), to: self.scene!)
+        sauce.physicsBody?.isDynamic = true
+        self.scene?.addChild(sauce)
         let wait = SKAction.wait(forDuration: 1.5)
         let moveAcross = SKAction.moveTo(x: UIScreen.main.bounds.width + sauce.size.width, duration: stationType.shootSpeed)
         let moveDown = SKAction.moveBy(x: 0, y: -UIScreen.main.bounds.height/4.0, duration: stationType.shootSpeed)

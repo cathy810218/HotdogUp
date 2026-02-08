@@ -93,7 +93,14 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             }
         }
     }
-    
+
+    // --- new: charge jump state and configuration
+    // track touch start timestamps so long press -> higher jump
+    var touchStartTimes: [ObjectIdentifier: TimeInterval] = [:]
+    let maxChargeDuration: TimeInterval = 0.6
+    let minJumpImpulse: CGFloat = CGFloat(kMinJumpHeight + 5)
+    let maxJumpImpulse: CGFloat = CGFloat(kMaxJumpHeight)
+
     override func didMove(to view: SKView) {
         super.didMove(to: view)
         highest.fontColor = hasInternet ? UIColor.white : UIColor.red
@@ -483,48 +490,67 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             let moveForever = SKAction.repeatForever(moveRight)
             hotdog.run(moveForever, withKey: "moveRight")
         } else {
-            // middle
+            // middle area: begin charging jump (handled in touchesBegan)
             if !hotdog.hasActions() {
                 hotdog.texture = hotdog.hotdogTexture
             }
-            let diff = CGVector(dx: 0, dy: CGFloat(kMinJumpHeight + 5))
-            if isLanded {
-                hotdog.physicsBody?.applyImpulse(diff)
-                if isSoundEffectOn {
-                    run(jumpSound)
-                }
-            }
-            isLanded = false
-
-            // Start moving background
-            if hotdog.position.y > self.frame.size.height / 2.0 && background.speed == 0 {
-                // move the background up
-                initialBackground.speed = kGameSpeed
-                for bg in backgrounds {
-                    bg.speed = kGameSpeed
-                }
-                for path in paths {
-                    path.speed = kGameSpeed
-                }
-                self.physicsBody?.categoryBitMask = ContactCategory.hotdog.rawValue
-            }
-            
-            if score % kLevel == 0 && score > 0 {
-                hotdog.physicsBody?.mass += 0.001
-                for bg in backgrounds {
-                    bg.speed += kSpeedIncrement
-                }
-                hotdogMoveVelocity += kHotdogMoveVelocityIncrement
-                for path in paths {
-                    path.speed += kSpeedIncrement
-                }
-            }
+            // Visual/audio feedback could be added here for charge start
         }
     }
 
-    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+    private func applyJump(for duration: TimeInterval) {
+        // map hold duration to impulse [minJumpImpulse .. maxJumpImpulse]
+        guard isLanded else { return }
+        let clamped = min(duration, maxChargeDuration)
+        let t = CGFloat(clamped / maxChargeDuration)
+        let impulse = minJumpImpulse + t * (maxJumpImpulse - minJumpImpulse)
+        let diff = CGVector(dx: 0, dy: impulse)
+        hotdog.physicsBody?.applyImpulse(diff)
+        if isSoundEffectOn {
+            run(jumpSound)
+        }
+        isLanded = false
+
+        // Start moving background if hotdog high enough
+        if hotdog.position.y > self.frame.size.height / 2.0 && background.speed == 0 {
+            initialBackground.speed = kGameSpeed
+            for bg in backgrounds { bg.speed = kGameSpeed }
+            for path in paths { path.speed = kGameSpeed }
+            self.physicsBody?.categoryBitMask = ContactCategory.hotdog.rawValue
+        }
+
+        // Level-up tuning (keeps previous behavior)
+        if score % kLevel == 0 && score > 0 {
+            hotdog.physicsBody?.mass += 0.001
+            for bg in backgrounds { bg.speed += kSpeedIncrement }
+            hotdogMoveVelocity += kHotdogMoveVelocityIncrement
+            for path in paths { path.speed += kSpeedIncrement }
+        }
+    }
+    
+     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         for t in touches {
-            self.touchDown(atPoint: t.location(in: self))
-        }
-    }
-}
+             let pos = t.location(in: self)
+             self.touchDown(atPoint: pos)
+             // if in middle area, record start time for charging
+             if pos.x >= self.frame.size.width / 5.0 && pos.x <= 4 * self.frame.size.width / 5.0 {
+                 touchStartTimes[ObjectIdentifier(t)] = t.timestamp
+             }
+         }
+      }
+
+     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+         for t in touches {
+             let id = ObjectIdentifier(t)
+             if let start = touchStartTimes[id] {
+                 let duration = t.timestamp - start
+                 applyJump(for: duration)
+                 touchStartTimes[id] = nil
+             }
+         }
+     }
+
+     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+         // Clean up any pending charge state
+         for t in touches { touchStartTimes[ObjectIdentifier(t)] = nil }
+     }

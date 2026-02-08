@@ -18,7 +18,7 @@ class Sauce: SKSpriteNode {
         self.physicsBody?.mass = 0.2
         self.physicsBody?.affectedByGravity = true
         self.physicsBody?.allowsRotation = false
-        self.physicsBody?.isDynamic = false
+        self.physicsBody?.isDynamic = true
         self.physicsBody?.contactTestBitMask = ContactCategory.hotdog.rawValue
         self.physicsBody?.categoryBitMask = ContactCategory.sauce.rawValue
     }
@@ -27,4 +27,3 @@ class Sauce: SKSpriteNode {
         fatalError("init(coder:) has not been implemented")
     }
 }
-
