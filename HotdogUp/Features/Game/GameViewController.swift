@@ -44,6 +44,11 @@ class GameViewController: UIViewController, GameSceneDelegate, PauseViewDelegate
     
     override func viewDidLoad() {
         super.viewDidLoad()
+        // Force full screen presentation and prevent interactive swipe-to-dismiss (iOS 13+)
+        self.modalPresentationStyle = .fullScreen
+        if #available(iOS 13.0, *) {
+            self.isModalInPresentation = true
+        }
         // need to set the key value before init the GameScene
         if UserDefaults.standard.object(forKey: "UserDefaultsIsMusicOnKey") == nil {
             UserDefaults.standard.set(true, forKey: "UserDefaultsIsMusicOnKey")
@@ -65,13 +70,15 @@ class GameViewController: UIViewController, GameSceneDelegate, PauseViewDelegate
         self.view?.addSubview(pauseBtn)
         pauseBtn.addTarget(self, action: #selector(pauseButtonDidPressed), for: .touchUpInside)
         pauseBtn.snp.makeConstraints { (make) in
-            make.top.left.equalTo(30)
-            if let w = pauseImg?.size.width {
-                make.width.height.equalTo(w)
-            } else {
-                make.width.height.equalTo(44)
-            }
-        }
+            // pin to safe area to avoid top/bottom inset issues on modern devices
+            make.top.equalTo(self.view.safeAreaLayoutGuide.snp.top).offset(30)
+            make.left.equalTo(self.view.safeAreaLayoutGuide.snp.left).offset(30)
+             if let w = pauseImg?.size.width {
+                 make.width.height.equalTo(w)
+             } else {
+                 make.width.height.equalTo(44)
+             }
+         }
         setupTutorialView()
         SKPaymentQueue.default().add(self)
         getPurchaseInfo()

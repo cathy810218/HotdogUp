@@ -62,12 +62,12 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     var score = 0 {
         didSet {
             scoreLabelNode.text = String(score)
-             if (score > UserDefaults.standard.integer(forKey: "UserDefaultsHighestScoreKey") && hasInternet) {
-                 highest.text = String(score)
-                 UserDefaults.standard.set(score, forKey: "UserDefaultsHighestScoreKey")
-             }
-         }
-     }
+            if (score > UserDefaults.standard.integer(forKey: "UserDefaultsHighestScoreKey") && hasInternet) {
+                highest.text = String(score)
+                UserDefaults.standard.set(score, forKey: "UserDefaultsHighestScoreKey")
+            }
+        }
+    }
     var timer = Timer()
     var timeCounter = kMinJumpHeight
     var isLanded = true
@@ -93,18 +93,18 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             }
         }
     }
-
+    
     // --- new: charge jump state and configuration
     // track touch start timestamps so long press -> higher jump
     var touchStartTimes: [ObjectIdentifier: TimeInterval] = [:]
     let maxChargeDuration: TimeInterval = 0.6
     let minJumpImpulse: CGFloat = CGFloat(kMinJumpHeight + 5)
     let maxJumpImpulse: CGFloat = CGFloat(kMaxJumpHeight)
-
+    
     override func didMove(to view: SKView) {
         super.didMove(to: view)
         highest.fontColor = hasInternet ? UIColor.white : UIColor.red
-
+        
         if !isGameOver {
             self.physicsWorld.contactDelegate = self
             self.physicsWorld.gravity = CGVector(dx: 0.0, dy: -9.8)
@@ -144,7 +144,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     }
     
     func createBackground() {
-
+        
         for i in 0 ... 1 {
             background = SKSpriteNode(texture: SKTexture(imageNamed: "background_second"))
             background.zPosition = -30
@@ -195,13 +195,13 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         let selectedRaw = UserDefaults.standard.integer(forKey: "UserDefaultsSelectCharacterKey")
         let selectedType = Hotdog.HotdogType(rawValue: selectedRaw) ?? .mrjj
         hotdog = Hotdog(hotdogType: selectedType)
-                
+        
         hotdog.zPosition = 30
         hotdog.position = CGPoint(x: self.frame.size.width/2.0, y: hotdog.size.height/2.0)
         hotdog.physicsBody?.categoryBitMask = ContactCategory.hotdog.rawValue
         hotdog.physicsBody?.collisionBitMask = ContactCategory.sidebounds.rawValue
-                                            | ContactCategory.rightbound.rawValue
-                                            | ContactCategory.leftbound.rawValue
+        | ContactCategory.rightbound.rawValue
+        | ContactCategory.leftbound.rawValue
         let run = SKAction.animate(with: hotdog.actions, timePerFrame: 0.2)
         hotdogRunForever = SKAction.repeatForever(run)
         hotdogMoveVelocity = 80.0
@@ -258,7 +258,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private func generatePaths() {
         let path = Path(position: CGPoint.zero)
         let tx = p_randomPoint(min: Int(path.size.width / 2.0),
-                      max: Int(self.frame.size.width - path.size.width))
+                               max: Int(self.frame.size.width - path.size.width))
         var firstPath = Path(position: CGPoint(x: tx,
                                                y: kMinJumpHeight))
         paths.append(firstPath)
@@ -267,80 +267,80 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             // safely get the last path instead of force-unwrapping
             guard let maybeFirst = paths.last else { continue }
             firstPath = maybeFirst
-              var x = p_randomPoint(min: Int(firstPath.size.width / 2.0),
-                                    max: Int(self.frame.size.width - firstPath.size.width))
-             
-             // if the distance between two paths (center to center) is greater than 1.5 paths
+            var x = p_randomPoint(min: Int(firstPath.size.width / 2.0),
+                                  max: Int(self.frame.size.width - firstPath.size.width))
+            
+            // if the distance between two paths (center to center) is greater than 1.5 paths
             while abs(Int(lastPath.position.x) - x) > Int(kPathGapMultiplier * firstPath.size.width) {
-                 x = p_randomPoint(min: Int(firstPath.size.width / 2.0),
-                                   max: Int(self.frame.size.width - firstPath.size.width))
-             }
-             
+                x = p_randomPoint(min: Int(firstPath.size.width / 2.0),
+                                  max: Int(self.frame.size.width - firstPath.size.width))
+            }
+            
             let y = Int(firstPath.frame.origin.y) + kMinJumpHeight + kPathYIncrement
             let path = Path(position: CGPoint(x: x, y: y))
             lastPath = path
             path.tag = firstPath.tag + 1
             paths.append(path)
         }
-     }
- 
-     private func p_randomPoint(min: Int, max: Int) -> Int {
-         guard max >= min else { return min }
-         return Int.random(in: min...max)
-     }
- 
-     private func reusePath() {
-         for path in paths {
-             if path.position.y < 0 {
-                 path.reset()
-                 
-                 var minLeft = 0
-                 if path.tag == 0 {
-                     reuseCount += 1
-                 }
-                 if reuseCount % kNumOfStairsToUpdate == 0 { // every kNumOfStairsToUpdate * 5 stairs change the stair style
-                     let level = reuseCount / kNumOfStairsToUpdate > 4 ? 4 : reuseCount / kNumOfStairsToUpdate
-                     if let newType = PathType(rawValue: level) {
-                         path.type = newType
-                     }
-                     
-                     if level >= 2 && level < 5 {
-                         // guard stations access - if stations are not yet created this will safely fallback to 0
-                         minLeft = Int(stations.first?.size.width ?? 0)
-                         if path.tag >= 3 {
-                             stations.forEach({ (station) in
-                                 station.isHidden = false
-                                 if let sType = StationType(rawValue: level) {
-                                     station.stationType = sType
-                                 }
-                             })
-                         }
-                     }
-                 }
-
-                  
-
-                  var x = p_randomPoint(min: Int(path.size.width / 2.0),
-                                        max: Int(self.frame.size.width - path.size.width))
-                  
-                  // if the distance between two paths (center to center) is greater than 1.8 paths
-                 var attempts = 0
-                 while (paths.last.map { abs(Int($0.position.x) - x) } ?? 0) > Int(kPathGapMultiplier * path.size.width) || x <= minLeft {
-                     x = p_randomPoint(min: Int(path.size.width / 2.0),
-                                       max: Int(self.frame.size.width - path.size.width))
-                     attempts += 1
-                     if attempts >= kPathMaxAttempts { break }
-                 }
-                 guard let last = paths.last else { continue }
-                 let y = Int(last.frame.origin.y) + kMinJumpHeight + 30
-                  path.position = CGPoint(x: x, y: y)
-                  if let idx = paths.firstIndex(of: path) {
-                      paths.remove(at: idx)
-                      paths.append(path)
-                  }
-              }
-          }
-     }
+    }
+    
+    private func p_randomPoint(min: Int, max: Int) -> Int {
+        guard max >= min else { return min }
+        return Int.random(in: min...max)
+    }
+    
+    private func reusePath() {
+        for path in paths {
+            if path.position.y < 0 {
+                path.reset()
+                
+                var minLeft = 0
+                if path.tag == 0 {
+                    reuseCount += 1
+                }
+                if reuseCount % kNumOfStairsToUpdate == 0 { // every kNumOfStairsToUpdate * 5 stairs change the stair style
+                    let level = reuseCount / kNumOfStairsToUpdate > 4 ? 4 : reuseCount / kNumOfStairsToUpdate
+                    if let newType = PathType(rawValue: level) {
+                        path.type = newType
+                    }
+                    
+                    if level >= 2 && level < 5 {
+                        // guard stations access - if stations are not yet created this will safely fallback to 0
+                        minLeft = Int(stations.first?.size.width ?? 0)
+                        if path.tag >= 3 {
+                            stations.forEach({ (station) in
+                                station.isHidden = false
+                                if let sType = StationType(rawValue: level) {
+                                    station.stationType = sType
+                                }
+                            })
+                        }
+                    }
+                }
+                
+                
+                
+                var x = p_randomPoint(min: Int(path.size.width / 2.0),
+                                      max: Int(self.frame.size.width - path.size.width))
+                
+                // if the distance between two paths (center to center) is greater than 1.8 paths
+                var attempts = 0
+                while (paths.last.map { abs(Int($0.position.x) - x) } ?? 0) > Int(kPathGapMultiplier * path.size.width) || x <= minLeft {
+                    x = p_randomPoint(min: Int(path.size.width / 2.0),
+                                      max: Int(self.frame.size.width - path.size.width))
+                    attempts += 1
+                    if attempts >= kPathMaxAttempts { break }
+                }
+                guard let last = paths.last else { continue }
+                let y = Int(last.frame.origin.y) + kMinJumpHeight + 30
+                path.position = CGPoint(x: x, y: y)
+                if let idx = paths.firstIndex(of: path) {
+                    paths.remove(at: idx)
+                    paths.append(path)
+                }
+            }
+        }
+    }
     
     func createStation() {
         // generates
@@ -401,25 +401,25 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     func didBegin(_ contact: SKPhysicsContact) {
         let bodyA = contact.bodyA
         let bodyB = contact.bodyB
-
+        
         func bodyHas(_ body: SKPhysicsBody, _ category: ContactCategory) -> Bool {
             return (body.categoryBitMask & category.rawValue) != 0
         }
-
+        
         // Update landed state safely
         if let hBody = hotdog.physicsBody {
             let dy = hBody.velocity.dy
             isLanded = dy <= 1.0 && dy >= 0.0
         }
-
+        
         // sidebounds
         if bodyHas(bodyA, .sidebounds) || bodyHas(bodyB, .sidebounds) {
             isLanded = true
-            #if DEBUG
+#if DEBUG
             print("At ground")
-            #endif
+#endif
         }
-
+        
         // leftbound / rightbound bounce handling
         if bodyHas(bodyA, .leftbound) || bodyHas(bodyB, .leftbound) {
             hotdog.xScale *= hotdog.xScale > 0 ? 1 : -1
@@ -434,7 +434,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             let moveForever = SKAction.repeatForever(moveLeft)
             hotdog.run(moveForever, withKey: "moveLeft")
         }
-
+        
         // path collision
         if bodyHas(bodyA, .path) || bodyHas(bodyB, .path) {
             let currPathBody = bodyHas(bodyA, .path) ? bodyA : bodyB
@@ -457,18 +457,18 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                 }
             }
         }
-
+        
         // sauce collision -> safer handling
         if (bodyHas(bodyA, .sauce) || bodyHas(bodyB, .sauce)) && !isGameOver {
             let sauceBody = bodyHas(bodyA, .sauce) ? bodyA : bodyB
             // remove the sauce node safely (node is already an optional SKNode)
             sauceBody.node?.removeFromParent()
-         #if DEBUG
-         print("Got shot")
-         #endif
-          gameOver()
-      }
-  }
+#if DEBUG
+            print("Got shot")
+#endif
+            gameOver()
+        }
+    }
     
     func touchDown(atPoint pos : CGPoint) {
         if pos.x < self.frame.size.width / 5.0 {
@@ -497,7 +497,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             // Visual/audio feedback could be added here for charge start
         }
     }
-
+    
     private func applyJump(for duration: TimeInterval) {
         // map hold duration to impulse [minJumpImpulse .. maxJumpImpulse]
         guard isLanded else { return }
@@ -510,7 +510,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             run(jumpSound)
         }
         isLanded = false
-
+        
         // Start moving background if hotdog high enough
         if hotdog.position.y > self.frame.size.height / 2.0 && background.speed == 0 {
             initialBackground.speed = kGameSpeed
@@ -518,7 +518,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             for path in paths { path.speed = kGameSpeed }
             self.physicsBody?.categoryBitMask = ContactCategory.hotdog.rawValue
         }
-
+        
         // Level-up tuning (keeps previous behavior)
         if score % kLevel == 0 && score > 0 {
             hotdog.physicsBody?.mass += 0.001
@@ -528,29 +528,30 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
     
-     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+    override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         for t in touches {
-             let pos = t.location(in: self)
-             self.touchDown(atPoint: pos)
-             // if in middle area, record start time for charging
-             if pos.x >= self.frame.size.width / 5.0 && pos.x <= 4 * self.frame.size.width / 5.0 {
-                 touchStartTimes[ObjectIdentifier(t)] = t.timestamp
-             }
-         }
-      }
-
-     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-         for t in touches {
-             let id = ObjectIdentifier(t)
-             if let start = touchStartTimes[id] {
-                 let duration = t.timestamp - start
-                 applyJump(for: duration)
-                 touchStartTimes[id] = nil
-             }
-         }
-     }
-
-     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-         // Clean up any pending charge state
-         for t in touches { touchStartTimes[ObjectIdentifier(t)] = nil }
-     }
+            let pos = t.location(in: self)
+            self.touchDown(atPoint: pos)
+            // if in middle area, record start time for charging
+            if pos.x >= self.frame.size.width / 5.0 && pos.x <= 4 * self.frame.size.width / 5.0 {
+                touchStartTimes[ObjectIdentifier(t)] = t.timestamp
+            }
+        }
+    }
+    
+    override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
+        for t in touches {
+            let id = ObjectIdentifier(t)
+            if let start = touchStartTimes[id] {
+                let duration = t.timestamp - start
+                applyJump(for: duration)
+                touchStartTimes[id] = nil
+            }
+        }
+    }
+    
+    override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
+        // Clean up any pending charge state
+        for t in touches { touchStartTimes[ObjectIdentifier(t)] = nil }
+    }
+}

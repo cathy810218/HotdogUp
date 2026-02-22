@@ -10,7 +10,7 @@ import UIKit
 
 class MenuViewController: UIViewController {
     var gameVC: GameViewController?
-    var characterVC: StoreViewController?    
+    var characterVC: StoreViewController?
     
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -18,10 +18,20 @@ class MenuViewController: UIViewController {
     
     @IBAction func startButtonPressed(_ sender: Any) {
         gameVC = UIStoryboard(name: "Main", bundle: nil).instantiateViewController(withIdentifier: "GameViewController") as? GameViewController
+        // Ensure the game is presented full screen and cannot be dismissed by swipe on iOS 13+
+        gameVC?.modalPresentationStyle = .fullScreen
+        if #available(iOS 13.0, *) {
+            gameVC?.isModalInPresentation = true
+        }
         self.present(gameVC!, animated: true, completion: nil)
     }
     @IBAction func helpButtonPressed(_ sender: UIButton) {
         characterVC = UIStoryboard(name: "Main", bundle: nil).instantiateViewController(withIdentifier: "CharacterViewController") as? StoreViewController
+        // Present the character/store view as full screen as well
+        characterVC?.modalPresentationStyle = .fullScreen
+        if #available(iOS 13.0, *) {
+            characterVC?.isModalInPresentation = true
+        }
         self.present(characterVC!, animated: true, completion: nil)
     }
     
@@ -60,4 +70,3 @@ extension UIColor {
             alpha: alpha)
     }
 }
-

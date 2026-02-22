@@ -22,7 +22,7 @@ let kLevel: Int = 10
 // UI constants
 let kScoreFontName = "MarkerFelt-Wide"
 let kScoreFontSize: CGFloat = 50.0
-let kScoreTopOffset: CGFloat = 30.0
+let kScoreTopOffset: CGFloat = 60.0
 
 // Path/layout tuning
 let kPathGapMultiplier: CGFloat = 1.65
