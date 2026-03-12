@@ -17,10 +17,15 @@ final class GameCoordinator {
         self.container = container
     }
 
-
     func start() {
-        // GameViewController currently uses its own setup; instantiate directly.
+        let viewModel = GameViewModel(
+            analytics: container.analytics,
+            ads: container.ads,
+            iap: container.iap,
+            settings: container.settings
+        )
         let vc = GameViewController()
+        vc.viewModel = viewModel
         navigation.setViewControllers([vc], animated: false)
     }
 }

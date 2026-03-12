@@ -24,16 +24,10 @@ class GameoverView: UIView {
     var shareBtn = UIButton()
     override init(frame: CGRect) {
         super.init(frame: frame)
-//        gameoverView = UIView()
-//        self.view.addSubview(gameoverView)
-//        gameoverView.isHidden = true
-//        gameoverView.snp.makeConstraints { (make) in
-//            make.edges.equalTo(self.view!)
-//        }
         self.backgroundColor = UIColor(hex: "#000000", alpha: 0.5)
-        
-        let selectedRaw = UserDefaults.standard.integer(forKey: "UserDefaultsSelectCharacterKey")
-        let currentHotdogType = Hotdog.HotdogType(rawValue: selectedRaw) ?? .mrjj
+
+        // Character type is read via Container settings; fallback to .mrjj
+        let currentHotdogType = Container.shared.settings.selectedHotdogType
         let gameoverHotdogView = UIImageView(image: UIImage(named: "\(currentHotdogType.name)_gameover"))
         let gameoverImg = UIImage(named: "gameover")
         

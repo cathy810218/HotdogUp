@@ -8,194 +8,317 @@
 
 import UIKit
 import SpriteKit
-import GameplayKit
 import SnapKit
-import StoreKit
 
-class GameViewController: UIViewController, GameSceneDelegate, PauseViewDelegate, GameoverViewDelegate, SKPaymentTransactionObserver, SKProductsRequestDelegate {
-    
-    var pauseView = PauseView()
-    var pauseBtn = UIButton()
-    var tutorialView = TutorialView()
-    
-    var gameScene : GameScene!
-    var skView = SKView()
-    var gameoverView = GameoverView()
-    var activityIndicator = UIActivityIndicatorView()
-    var hasInternet = true {
-        didSet {
-            if !hasInternet {
-                let alert = UIAlertController(title: "No Internet Warnings!",
-                                              message: "Please make sure you have internet connection for storing your highest score",
-                                              preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
-                self.present(alert, animated: true, completion: nil)
-            }
-        }
-    }
-    var requestIAP: SKProductsRequest?
-    var product: SKProduct?
-    var productID = "com.hotdogup.removeads"
-    
+class GameViewController: UIViewController {
+
+    // MARK: - Dependencies (injected by GameCoordinator)
+
+    var viewModel: GameViewModel!
+
+    // MARK: - UI
+
+    private var pauseView = PauseView()
+    private var pauseBtn = UIButton()
+    private var tutorialView = TutorialView()
+    private var gameoverView = GameoverView()
+    private var activityIndicator = UIActivityIndicatorView()
+
+    private var gameScene: GameScene!
+    private var skView = SKView()
+
+    private var settings: GameSettings { viewModel.settings }
+
+    // MARK: - Lifecycle
+
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
         presentGameScene()
     }
-    
+
     override func viewDidLoad() {
         super.viewDidLoad()
-        // Force full screen presentation and prevent interactive swipe-to-dismiss (iOS 13+)
-        self.modalPresentationStyle = .fullScreen
-        if #available(iOS 13.0, *) {
-            self.isModalInPresentation = true
-        }
-        // need to set the key value before init the GameScene
-        if UserDefaults.standard.object(forKey: "UserDefaultsIsMusicOnKey") == nil {
-            UserDefaults.standard.set(true, forKey: "UserDefaultsIsMusicOnKey")
-        }
-        
-        if UserDefaults.standard.object(forKey: "UserDefaultsIsSoundEffectOnKey") == nil {
-            UserDefaults.standard.set(true, forKey: "UserDefaultsIsSoundEffectOnKey")
-        }
-        
+        modalPresentationStyle = .fullScreen
+        isModalInPresentation = true
+
+        // Register default audio preferences on first launch
+        settings.registerDefaultsIfNeeded()
+
+        // Create the SpriteKit game scene, inject settings
         gameScene = GameScene(size: view.bounds.size)
         gameScene.scaleMode = .resizeFill
         gameScene.gameSceneDelegate = self
+        gameScene.settings = settings
+
         setupPauseView()
         setupGameOverView()
-        
-        pauseBtn = UIButton(type: .custom)
-        let pauseImg = UIImage(named: "button_pause")
-        pauseBtn.setBackgroundImage(pauseImg, for: .normal)
-        self.view?.addSubview(pauseBtn)
-        pauseBtn.addTarget(self, action: #selector(pauseButtonDidPressed), for: .touchUpInside)
-        pauseBtn.snp.makeConstraints { (make) in
-            // pin to safe area to avoid top/bottom inset issues on modern devices
-            make.top.equalTo(self.view.safeAreaLayoutGuide.snp.top).offset(30)
-            make.left.equalTo(self.view.safeAreaLayoutGuide.snp.left).offset(30)
-             if let w = pauseImg?.size.width {
-                 make.width.height.equalTo(w)
-             } else {
-                 make.width.height.equalTo(44)
-             }
-         }
+        setupPauseButton()
         setupTutorialView()
-        SKPaymentQueue.default().add(self)
-        getPurchaseInfo()
-        
-        if !UserDefaults.standard.bool(forKey: "UserDefaultsDoNotShowTutorialKey") {
+        setupActivityIndicator()
+        bindViewModel()
+
+        // Show tutorial on first launch
+        if !settings.doNotShowTutorial {
             tutorialView.isHidden = false
-            
             gameScene.isUserInteractionEnabled = false
             tutorialView.showCheckbox = true
         }
-        
-        // set up activity indicator
-        activityIndicator = UIActivityIndicatorView(style: .large)
-        activityIndicator.hidesWhenStopped = true
-        activityIndicator.color = .white        // to mimic .whiteLarge
-        view.addSubview(activityIndicator)
 
-        activityIndicator.snp.makeConstraints { make in
-            make.center.equalToSuperview()
-        }
-                
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(pauseButtonDidPressed),
             name: UIApplication.willResignActiveNotification,
             object: nil
         )
+
+        viewModel.startGame()
     }
 
-    func presentGameScene() {
+    // MARK: - ViewModel Binding
+
+    private func bindViewModel() {
+        viewModel.onScoreChanged = { [weak self] score in
+            // GameScene already updates its own label; ViewModel persists highest.
+            _ = score
+            self?.updateIAPButtonStates()
+        }
+
+        viewModel.onShowShare = { [weak self] text, image in
+            self?.presentShareSheet(text: text, image: image)
+        }
+
+        viewModel.onIAPCompleted = { [weak self] success in
+            self?.activityIndicator.stopAnimating()
+            if success {
+                self?.gameoverView.removeAdsBtn.isEnabled = false
+                self?.gameoverView.restoreIAPBtn.isEnabled = false
+            } else {
+                // User cancelled or no transaction
+                self?.gameoverView.removeAdsBtn.isEnabled = true
+            }
+        }
+
+        viewModel.onIAPError = { [weak self] message in
+            self?.activityIndicator.stopAnimating()
+            self?.showAlert(title: "Error", message: message)
+        }
+    }
+
+    // MARK: - Scene Presentation
+
+    private func presentGameScene() {
         guard let v = view as? SKView else { return }
         skView = v
-         if _isDebugAssertConfiguration() {
-//            skView.showsFPS = true
-//            skView.showsPhysics = true
-//            skView.showsNodeCount = true
-         }
-         skView.ignoresSiblingOrder = true
-         skView.presentScene(gameScene)
-     }
-    
-    func setupPauseView() {
-        pauseView = PauseView(frame: self.view.frame)
-        self.view.addSubview(pauseView)
+        skView.ignoresSiblingOrder = true
+        skView.presentScene(gameScene)
+    }
+
+    // MARK: - UI Setup
+
+    private func setupPauseButton() {
+        pauseBtn = UIButton(type: .custom)
+        let pauseImg = UIImage(named: "button_pause")
+        pauseBtn.setBackgroundImage(pauseImg, for: .normal)
+        view.addSubview(pauseBtn)
+        pauseBtn.addTarget(self, action: #selector(pauseButtonDidPressed), for: .touchUpInside)
+        pauseBtn.snp.makeConstraints { make in
+            make.top.equalTo(view.safeAreaLayoutGuide.snp.top).offset(30)
+            make.left.equalTo(view.safeAreaLayoutGuide.snp.left).offset(30)
+            if let w = pauseImg?.size.width {
+                make.width.height.equalTo(w)
+            } else {
+                make.width.height.equalTo(44)
+            }
+        }
+    }
+
+    private func setupPauseView() {
+        pauseView = PauseView(frame: view.frame)
+        view.addSubview(pauseView)
         pauseView.isHidden = true
         pauseView.delegate = self
     }
-    
-    @objc func pauseButtonDidPressed() {
-        if gameoverView.isHidden == true {
-            UserDefaults.standard.set(gameScene.speed, forKey: "UserDefaultsResumeSpeedKey")
-            gameScene.gamePaused = true
-            MusicPlayer.player.pause()
-            pauseView.isHidden = false
-            gameScene.isUserInteractionEnabled = false
-            pauseBtn.isEnabled = false // disable it
-        }
+
+    private func setupGameOverView() {
+        gameoverView = GameoverView(frame: view.frame)
+        view.addSubview(gameoverView)
+        gameoverView.isHidden = true
+        gameoverView.delegate = self
     }
-    
-    func setupTutorialView() {
-        tutorialView = TutorialView(frame: self.view.frame)
-        self.view.addSubview(tutorialView)
+
+    private func setupTutorialView() {
+        tutorialView = TutorialView(frame: view.frame, settings: settings)
+        view.addSubview(tutorialView)
         tutorialView.isHidden = true
         let tap = UITapGestureRecognizer(target: self, action: #selector(tapToDismissTutorialView))
         tutorialView.addGestureRecognizer(tap)
     }
-    
-    @objc func tapToDismissTutorialView() {
+
+    private func setupActivityIndicator() {
+        activityIndicator = UIActivityIndicatorView(style: .large)
+        activityIndicator.hidesWhenStopped = true
+        activityIndicator.color = .white
+        view.addSubview(activityIndicator)
+        activityIndicator.snp.makeConstraints { make in
+            make.center.equalToSuperview()
+        }
+    }
+
+    // MARK: - Actions
+
+    @objc private func pauseButtonDidPressed() {
+        guard gameoverView.isHidden else { return }
+        settings.resumeSpeed = Float(gameScene.speed)
+        gameScene.gamePaused = true
+        MusicPlayer.player.pause()
+        pauseView.isHidden = false
+        pauseView.isSoundOn = settings.isSoundEffectOn
+        pauseView.isBackgroundMusicOn = settings.isMusicOn
+        gameScene.isUserInteractionEnabled = false
+        pauseBtn.isEnabled = false
+        viewModel.pause()
+    }
+
+    @objc private func tapToDismissTutorialView() {
         tutorialView.isHidden = true
         gameScene.isUserInteractionEnabled = true
     }
-    
-    //MARK: PauseViewDelegate
+
+    private func resetGame() {
+        gameScene.resetGameScene()
+        pauseView.isHidden = true
+        pauseBtn.isEnabled = true
+        viewModel.startGame()
+    }
+
+    private func returnToMenu() {
+        gameScene.removeAllChildren()
+        gameScene.removeFromParent()
+        skView.presentScene(nil)
+        MusicPlayer.player.stop()
+        dismiss(animated: true, completion: nil)
+    }
+
+    // MARK: - IAP Helpers
+
+    private func updateIAPButtonStates() {
+        let purchased = settings.hasRemovedAds
+        gameoverView.removeAdsBtn.isEnabled = !purchased
+        gameoverView.restoreIAPBtn.isEnabled = !purchased
+    }
+
+    // MARK: - Sharing
+
+    private func presentShareSheet(text: String, image: UIImage?) {
+        var items: [Any] = [text]
+        if let img = image { items.append(img) }
+
+        let activityVC = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        activityVC.excludedActivityTypes = [.addToReadingList, .airDrop, .assignToContact,
+                                            .copyToPasteboard, .openInIBooks, .postToVimeo,
+                                            .saveToCameraRoll, .print]
+
+        if UIDevice.current.userInterfaceIdiom == .pad {
+            activityVC.popoverPresentationController?.sourceView = gameoverView.shareBtn
+            activityVC.popoverPresentationController?.sourceRect = CGRect(
+                x: gameoverView.shareBtn.bounds.width / 2,
+                y: gameoverView.shareBtn.bounds.height, width: 0, height: 0)
+            activityVC.popoverPresentationController?.permittedArrowDirections = .up
+        }
+        present(activityVC, animated: true)
+    }
+
+    // MARK: - Alerts
+
+    private func showAlert(title: String, message: String) {
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+
+    // MARK: - Appearance
+
+    override var shouldAutorotate: Bool { true }
+
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        UIDevice.current.userInterfaceIdiom == .phone ? .allButUpsideDown : .all
+    }
+
+    override var prefersStatusBarHidden: Bool { true }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self, name: UIApplication.willResignActiveNotification, object: nil)
+    }
+}
+
+// MARK: - GameSceneDelegate
+
+extension GameViewController: GameSceneDelegate {
+
+    func gameSceneDidEnd() {
+        gameoverView.isHidden = false
+        pauseBtn.isEnabled = false
+        updateIAPButtonStates()
+        viewModel.gameOver()
+    }
+
+    func gameSceneDidScore(_ newScore: Int) {
+        // Scene owns the real-time score during physics; sync it to the ViewModel for persistence
+        let delta = newScore - viewModel.score
+        if delta > 0 {
+            viewModel.incrementScore(by: delta)
+        }
+    }
+}
+
+// MARK: - PauseViewDelegate
+
+extension GameViewController: PauseViewDelegate {
+
     func pauseViewDidPressHomeButton() {
         returnToMenu()
     }
-    
+
     func pauseViewDidPressResumeButton() {
-        gameScene.speed = CGFloat(UserDefaults.standard.float(forKey: "UserDefaultsResumeSpeedKey"))
+        gameScene.speed = CGFloat(settings.resumeSpeed)
         gameScene.gamePaused = false
-        gameScene.isReset = false
-        gameScene.isMusicOn = UserDefaults.standard.bool(forKey: "UserDefaultsIsMusicOnKey")
+        if settings.isMusicOn {
+            MusicPlayer.resumePlay()
+        }
         pauseView.isHidden = true
         pauseBtn.isEnabled = true
         gameScene.isUserInteractionEnabled = true
+        viewModel.resume()
     }
-    
+
     func pauseViewDidPressReplayButton() {
         resetGame()
     }
-    
+
     func pauseViewDidPressSoundButton() {
-        // check if sound is on or off
-        gameScene.isSoundEffectOn = !gameScene.isSoundEffectOn
-        UserDefaults.standard.set(gameScene.isSoundEffectOn, forKey: "UserDefaultsIsSoundEffectOnKey")
-        pauseView.isSoundOn = gameScene.isSoundEffectOn
+        viewModel.toggleSoundEffect()
+        pauseView.isSoundOn = settings.isSoundEffectOn
     }
-    
+
     func pauseViewDidPressMusicButton() {
-        gameScene.isMusicOn = !gameScene.isMusicOn
-        UserDefaults.standard.set(gameScene.isMusicOn, forKey: "UserDefaultsIsMusicOnKey")
-        pauseView.isBackgroundMusicOn = gameScene.isMusicOn
+        viewModel.toggleMusic()
+        pauseView.isBackgroundMusicOn = settings.isMusicOn
+        // Apply immediately
+        settings.isMusicOn ? MusicPlayer.resumePlay() : MusicPlayer.player.pause()
     }
-    
+
     func pauseViewDidPressTutorialButton() {
         tutorialView.isHidden = false
         tutorialView.showCheckbox = false
         gameScene.isUserInteractionEnabled = false
     }
-    
-    // ============================
-    
-    //Mark: GameoverViewDelegate
-    func gameoverViewDidPressShareButton() {
-        let score : String = String(gameScene.score)
+}
 
-        // Generate the screenshot in a safe way
+// MARK: - GameoverViewDelegate
+
+extension GameViewController: GameoverViewDelegate {
+
+    func gameoverViewDidPressShareButton() {
         var screenshot: UIImage? = nil
         UIGraphicsBeginImageContextWithOptions(view.bounds.size, false, UIScreen.main.scale)
         if let context = UIGraphicsGetCurrentContext() {
@@ -203,269 +326,26 @@ class GameViewController: UIViewController, GameSceneDelegate, PauseViewDelegate
             screenshot = UIGraphicsGetImageFromCurrentImageContext()
         }
         UIGraphicsEndImageContext()
-
-        socialShare(sharingText: "🌭 I just hit \(score) on HotdogUp! Beat it! 🌭\"\n\n\n", sharingImage: screenshot)
-
-//        Flurry.logEvent("User tapped Share");
+        viewModel.share(screenshot: screenshot)
     }
-    private func socialShare(sharingText: String?, sharingImage: UIImage?) {
-        var sharingItems = [Any]()
-        
-        if let text = sharingText {
-            sharingItems.append(text)
-        }
-        if let image = sharingImage {
-            sharingItems.append(image)
-        }
-        
-        
-        let activityVC = UIActivityViewController(activityItems: sharingItems, applicationActivities: nil)
-        activityVC.excludedActivityTypes = [.addToReadingList,
-                                            .airDrop,
-                                            .assignToContact,
-                                            .copyToPasteboard,
-                                            .openInIBooks,
-                                            .postToVimeo,
-                                            .saveToCameraRoll,
-                                            .print]
-        if UIDevice.current.userInterfaceIdiom == .phone {
-            self.present(activityVC, animated: true, completion: nil)
-        } else {
-            activityVC.popoverPresentationController?.sourceView = gameoverView.shareBtn
-            activityVC.popoverPresentationController?.sourceRect = CGRect(x: gameoverView.shareBtn.bounds.width / 2,
-                                                                          y: gameoverView.shareBtn.bounds.height,
-                                                                          width: 0,
-                                                                          height: 0)
-            activityVC.popoverPresentationController?.permittedArrowDirections = .up
-            self.present(activityVC, animated: true, completion: nil)
-        }
-        
-    }
-    
+
     func gameoverViewDidPressReplayButton() {
         gameoverView.isHidden = true
         resetGame()
     }
-    
+
     func gameoverViewDidPressHomeButton() {
         returnToMenu()
     }
-    
+
     func gameoverViewDidPressRemoveAds() {
-        if let product = product {
-            activityIndicator.startAnimating()
-            let payment = SKPayment(product: product)
-            SKPaymentQueue.default().add(payment)
-        } else {
-            let alert = UIAlertController(title: "Error", message: "Something is wrong! Please try again.", preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
-            self.present(alert, animated: true, completion: nil)
-        }
+        activityIndicator.startAnimating()
+        Task { await viewModel.buyRemoveAds() }
     }
-    
+
     func gameoverViewDidPressRestore() {
         activityIndicator.startAnimating()
-        SKPaymentQueue.default().restoreCompletedTransactions()
-    }
-    
-    // ===================================
-    
-    func returnToMenu() {
-        gameScene.removeAllChildren()
-        gameScene.removeFromParent()
-        skView.presentScene(nil)
-        MusicPlayer.player.stop()
-        self.dismiss(animated: true, completion: nil)
-    }
-    
-    func resetGame() {
-        gameScene.resetGameScene()
-        pauseView.isHidden = true
-        pauseBtn.isEnabled = true
-    }
-    
-    func setupGameOverView() {
-        gameoverView = GameoverView(frame: self.view.frame)
-        self.view.addSubview(gameoverView)
-        gameoverView.isHidden = true
-        gameoverView.delegate = self
-    }
-    
-    //MARK: GameSceneDelegate
-    // this delegate method trigger when game is over
-    func gameSceneGameEnded() {
-        gameoverView.isHidden = false
-        pauseBtn.isEnabled = false
-    }
-
-    
-    
-    // ============================
-    
-    // IAP
-    func getPurchaseInfo() {
-        if SKPaymentQueue.canMakePayments() {
-            requestIAP = SKProductsRequest(productIdentifiers: Set([self.productID]))
-             requestIAP?.delegate = self
-             requestIAP?.start()
-         }
-     }
-    
-    func request(_ request: SKRequest, didFailWithError error: Error) {
-        // StoreKit callbacks can be invoked on a background thread; ensure UI work runs on main
-        DispatchQueue.main.async {
-            self.activityIndicator.stopAnimating()
-            self.hasInternet = false
-            self.gameScene.hasInternet = false
-            let alert = UIAlertController(title: "Error", message: "Can't make payment. Please check the Internet connection.", preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
-            self.present(alert, animated: true, completion: nil)
-        }
-    }
-    
-    func productsRequest(_ request: SKProductsRequest, didReceive response: SKProductsResponse) {
-        // SKProductsRequest delegate may be called off the main thread. Move UI work to main.
-        let products = response.products
-        if products.count == 0 {
-            print("No product found")
-        } else {
-            product = products[0]
-        }
-
-        DispatchQueue.main.async {
-            self.hasInternet = true
-            self.gameScene.hasInternet = true
-            if self.product != nil {
-                self.gameoverView.removeAdsBtn.isEnabled = !UserDefaults.standard.bool(forKey: "UserDefaultsPurchaseKey")
-                self.gameoverView.restoreIAPBtn.isEnabled = self.gameoverView.removeAdsBtn.isEnabled
-            }
-        }
-
-        let invalids = response.invalidProductIdentifiers
-        for product in invalids {
-            print("product not found: \(product)")
-        }
-    }
-    
-    func paymentQueue(_ queue: SKPaymentQueue, updatedTransactions transactions: [SKPaymentTransaction]) {
-        for transaction in transactions {
-            switch transaction.transactionState {
-            case .purchased:
-                queue.finishTransaction(transaction)
-                // UI updates must run on main thread
-                DispatchQueue.main.async {
-                    self.gameoverView.removeAdsBtn.isEnabled = false
-                    self.gameoverView.restoreIAPBtn.isEnabled = false
-
-                    UserDefaults.standard.set(true, forKey: "UserDefaultsPurchaseKey")
-                    UserDefaults.standard.synchronize()
-//                    Flurry.logEvent("User purchased RemoveAds");
-                    self.activityIndicator.stopAnimating()
-                }
-                break
-            case .failed:
-                queue.finishTransaction(transaction)
-                DispatchQueue.main.async {
-                    self.activityIndicator.stopAnimating()
-                    self.gameoverView.removeAdsBtn.isEnabled = true
-                }
-                print("Failed")
-                break
-            default:
-                print(transaction.transactionState)
-                break
-            }
-        }
-    }
-    
-    
-    func paymentQueue(_ queue: SKPaymentQueue, restoreCompletedTransactionsFailedWithError error: Error) {
-        DispatchQueue.main.async {
-            self.activityIndicator.stopAnimating()
-            let alert = UIAlertController(title: "Restore Failed",
-                                          message: "We are unable to restore your purchase.",
-                                          preferredStyle: .alert)
-            alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
-            self.present(alert, animated: true, completion: nil)
-        }
-    }
-    
-    func paymentQueueRestoreCompletedTransactionsFinished(_ queue: SKPaymentQueue) {
-        DispatchQueue.main.async {
-            self.activityIndicator.stopAnimating()
-            if queue.transactions.count == 0 {
-                let alert = UIAlertController(title: "Restore Failed",
-                                              message: "You have not purchased RemoveAds.",
-                                              preferredStyle: .alert)
-                alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
-                self.present(alert, animated: true, completion: nil)
-            }
-            for transaction in queue.transactions {
-                if transaction.transactionState == .restored {
-                    queue.finishTransaction(transaction)
-                    print("Restore")
-                    self.gameoverView.removeAdsBtn.isEnabled = false
-                    self.gameoverView.restoreIAPBtn.isEnabled = false
-                    
-                    UserDefaults.standard.set(true, forKey: "UserDefaultsPurchaseKey")
-                    UserDefaults.standard.synchronize()
-                    let alert = UIAlertController(title: "Restore Succeed",
-                                                  message: "Ads is now removed",
-                                                  preferredStyle: .alert)
-                    alert.addAction(UIAlertAction(title: "OK", style: .default, handler: nil))
-                    self.present(alert, animated: true, completion: nil)
-                    break
-                }
-            }
-        }
-    }
-    
-    // ===============================
-    
-    override var shouldAutorotate: Bool {
-        return true
-    }
-    
-    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
-        if UIDevice.current.userInterfaceIdiom == .phone {
-            return .allButUpsideDown
-        } else {
-            return .all
-        }
-    }
-    
-    override func didReceiveMemoryWarning() {
-        super.didReceiveMemoryWarning()
-        // Release any cached data, images, etc that aren't in use.
-    }
-    
-    override var prefersStatusBarHidden: Bool {
-        return true
-    }
-    
-    deinit {
-        SKPaymentQueue.default().remove(self)
-
-        NotificationCenter.default.removeObserver(
-            self,
-            name: UIApplication.willResignActiveNotification,
-            object: nil
-        )
-
-        requestIAP?.delegate = nil
-        requestIAP?.cancel()
-        requestIAP = nil
+        Task { await viewModel.restorePurchases() }
     }
 }
 
-extension UIView {
-    
-    func takeSnapshot() -> UIImage? {
-        UIGraphicsBeginImageContextWithOptions(bounds.size, false, UIScreen.main.scale)
-        drawHierarchy(in: self.bounds, afterScreenUpdates: true)
-        
-        let image = UIGraphicsGetImageFromCurrentImageContext()
-        UIGraphicsEndImageContext()
-        return image
-    }
-}

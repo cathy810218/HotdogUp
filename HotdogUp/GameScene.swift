@@ -10,14 +10,14 @@ import SpriteKit
 import GameplayKit
 import AVFoundation
 
+// MARK: - GameScene Delegate
+
 protocol GameSceneDelegate: AnyObject {
-    func gameSceneGameEnded()
+    func gameSceneDidEnd()
+    func gameSceneDidScore(_ newScore: Int)
 }
 
-enum GameState {
-    case playing
-    case dead
-}
+// MARK: - Physics Contact Categories
 
 enum ContactCategory: UInt32 {
     case hotdog = 1
@@ -29,85 +29,94 @@ enum ContactCategory: UInt32 {
     case station = 64
 }
 
+// MARK: - GameScene
+
 class GameScene: SKScene, SKPhysicsContactDelegate {
-    
+
     weak var gameSceneDelegate: GameSceneDelegate?
-    
-    var hotdog = Hotdog(hotdogType: .mrjj)
-    var hotdogRunForever = SKAction()
-    
-    var background = SKSpriteNode()
-    var initialBackground = SKSpriteNode()
-    
-    var scoreLabelNode = SKLabelNode()
-    var highest = SKLabelNode()
-    var reuseCount = 0
-    var hotdogMoveVelocity: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 100.0 : 80.0
+
+    /// Injected settings — the scene reads preferences through this instead of UserDefaults.
+    var settings: GameSettings?
+
+    // MARK: - Game Objects
+
+    private(set) var hotdog = Hotdog(hotdogType: .mrjj)
+    private var hotdogRunForever = SKAction()
+
+    private var scrollingBackground = SKSpriteNode()
+    private var initialBackground = SKSpriteNode()
+    private var backgrounds = [SKSpriteNode]()
+
+    private var scoreLabelNode = SKLabelNode()
+    private var highestScoreLabel = SKLabelNode()
+
+    private(set) var paths = [Path]()
+    private(set) var stations = [Station]()
+
+    // MARK: - Game State (scene-local rendering state)
+
+    private var reuseCount = 0
+    private var hotdogMoveVelocity: CGFloat = UIDevice.current.userInterfaceIdiom == .pad ? 100.0 : 80.0
+    private(set) var isGameOver = false
+    private var isLanded = true
+
     var gamePaused = false {
-        didSet {
-            isPaused = gamePaused
-        }
+        didSet { isPaused = gamePaused }
     }
-    
+
     override var isPaused: Bool {
-        didSet {
-            super.isPaused = gamePaused
-        }
+        didSet { super.isPaused = gamePaused }
     }
+
     var hasInternet = true {
-        didSet {
-            highest.fontColor = hasInternet ? UIColor.white : UIColor.red
-        }
+        didSet { highestScoreLabel.fontColor = hasInternet ? .white : .red }
     }
-    var score = 0 {
+
+    /// Score is owned by the scene for SpriteKit label updates and delegates
+    /// upward so the ViewModel can persist it.
+    private(set) var score = 0 {
         didSet {
             scoreLabelNode.text = String(score)
-            if (score > UserDefaults.standard.integer(forKey: "UserDefaultsHighestScoreKey") && hasInternet) {
-                highest.text = String(score)
-                UserDefaults.standard.set(score, forKey: "UserDefaultsHighestScoreKey")
+            gameSceneDelegate?.gameSceneDidScore(score)
+            // Update highest label if needed
+            if let s = settings, score > s.highestScore && hasInternet {
+                highestScoreLabel.text = String(score)
             }
         }
     }
-    var timer = Timer()
-    var timeCounter = kMinJumpHeight
-    var isLanded = true
-    var paths = [Path]()
-    var stations = [Station]()
-    var healths = [SKSpriteNode]()
-    var backgrounds = [SKSpriteNode]()
-    var isGameOver = false
-    var jumpSound = SKAction()
-    var fallingSound = SKAction()
-    var isSoundEffectOn = UserDefaults.standard.bool(forKey: "UserDefaultsIsSoundEffectOnKey")
-    var isMusicOn = UserDefaults.standard.bool(forKey: "UserDefaultsIsMusicOnKey") {
-        didSet {
+
+    // MARK: - Audio (read from settings)
+
+    var isSoundEffectOn: Bool { settings?.isSoundEffectOn ?? true }
+    var isMusicOn: Bool {
+        get { settings?.isMusicOn ?? true }
+        set {
+            settings?.isMusicOn = newValue
             if !gamePaused {
-                isMusicOn ? MusicPlayer.resumePlay() : MusicPlayer.player.pause()
+                newValue ? MusicPlayer.resumePlay() : MusicPlayer.player.pause()
             }
         }
     }
-    var isReset = false {
-        didSet {
-            if isReset && UserDefaults.standard.bool(forKey: "UserDefaultsIsMusicOnKey"){
-                MusicPlayer.replay()
-            }
-        }
-    }
-    
-    // --- new: charge jump state and configuration
-    // track touch start timestamps so long press -> higher jump
-    var touchStartTimes: [ObjectIdentifier: TimeInterval] = [:]
-    let maxChargeDuration: TimeInterval = 0.6
-    let minJumpImpulse: CGFloat = CGFloat(kMinJumpHeight + 5)
-    let maxJumpImpulse: CGFloat = CGFloat(kMaxJumpHeight)
-    
+
+    private var jumpSound = SKAction()
+    private var fallingSound = SKAction()
+
+    // MARK: - Charged Jump
+
+    private var touchStartTimes: [ObjectIdentifier: TimeInterval] = [:]
+    private let maxChargeDuration: TimeInterval = 0.6
+    private let minJumpImpulse: CGFloat = CGFloat(kMinJumpHeight + 5)
+    private let maxJumpImpulse: CGFloat = CGFloat(kMaxJumpHeight)
+
+    // MARK: - Scene Lifecycle
+
     override func didMove(to view: SKView) {
         super.didMove(to: view)
-        highest.fontColor = hasInternet ? UIColor.white : UIColor.red
-        
+        highestScoreLabel.fontColor = hasInternet ? .white : .red
+
         if !isGameOver {
-            self.physicsWorld.contactDelegate = self
-            self.physicsWorld.gravity = CGVector(dx: 0.0, dy: -9.8)
+            physicsWorld.contactDelegate = self
+            physicsWorld.gravity = CGVector(dx: 0.0, dy: -9.8)
             createBackground()
             setupPaths()
             setupCounterLabel()
@@ -120,234 +129,234 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         MusicPlayer.loadBackgroundMusic()
         isMusicOn ? MusicPlayer.resumePlay() : MusicPlayer.player.stop()
     }
-    
+
     func resetGameScene() {
         removeAllChildren()
         paths.removeAll()
         stations.removeAll()
-        
+
         setupPaths()
         setupHighestScoreLabel()
         createHotdog()
         createBackground()
         createStation()
-        
+
         score = 0
         reuseCount = 0
         scoreLabelNode.text = "0"
-        
+
         gamePaused = false
         isGameOver = false
         isLanded = true
-        isReset = true
         isUserInteractionEnabled = true
-    }
-    
-    func createBackground() {
-        
-        for i in 0 ... 1 {
-            background = SKSpriteNode(texture: SKTexture(imageNamed: "background_second"))
-            background.zPosition = -30
-            background.anchorPoint = CGPoint.zero
-            background.size = CGSize(width: self.frame.size.width,
-                                     height: self.frame.size.height)
-            background.position = CGPoint(x: 0, y: background.size.height * CGFloat(i))
-            addChild(background)
-            backgrounds.append(background)
-            let moveDown = SKAction.moveBy(x: 0, y: -background.size.height, duration: 12)
-            let moveReset = SKAction.moveBy(x: 0, y: background.size.height, duration: 0)
-            let moveLoop = SKAction.sequence([moveDown, moveReset])
-            let moveForever = SKAction.repeatForever(moveLoop)
-            background.run(moveForever)
-            background.speed = 0
+
+        if settings?.isMusicOn == true {
+            MusicPlayer.replay()
         }
+    }
+
+    // MARK: - Background & Bounds
+
+    private func createBackground() {
+        for i in 0...1 {
+            scrollingBackground = SKSpriteNode(texture: SKTexture(imageNamed: "background_second"))
+            scrollingBackground.zPosition = -30
+            scrollingBackground.anchorPoint = .zero
+            scrollingBackground.size = CGSize(width: frame.size.width, height: frame.size.height)
+            scrollingBackground.position = CGPoint(x: 0, y: scrollingBackground.size.height * CGFloat(i))
+            addChild(scrollingBackground)
+            backgrounds.append(scrollingBackground)
+
+            let moveDown = SKAction.moveBy(x: 0, y: -scrollingBackground.size.height, duration: 12)
+            let moveReset = SKAction.moveBy(x: 0, y: scrollingBackground.size.height, duration: 0)
+            scrollingBackground.run(SKAction.repeatForever(SKAction.sequence([moveDown, moveReset])))
+            scrollingBackground.speed = 0
+        }
+
         initialBackground = SKSpriteNode(texture: SKTexture(imageNamed: "background_first"))
         initialBackground.zPosition = -20
-        initialBackground.anchorPoint = CGPoint.zero
-        initialBackground.size = CGSize(width: self.frame.size.width, height: self.frame.size.height)
-        initialBackground.position = CGPoint(x: 0, y: 0)
+        initialBackground.anchorPoint = .zero
+        initialBackground.size = CGSize(width: frame.size.width, height: frame.size.height)
+        initialBackground.position = .zero
         addChild(initialBackground)
-        let moveDown = SKAction.moveBy(x: 0, y: -initialBackground.size.height, duration: 12)
-        initialBackground.run(moveDown)
+        initialBackground.run(SKAction.moveBy(x: 0, y: -initialBackground.size.height, duration: 12))
         initialBackground.speed = 0
-        
-        // Add boundries physics body
-        physicsBody = SKPhysicsBody(edgeFrom: CGPoint(x: 0, y: 0), to: CGPoint(x: self.frame.size.width, y: 0))
+
+        // Boundary physics bodies
+        physicsBody = SKPhysicsBody(edgeFrom: CGPoint(x: 0, y: 0), to: CGPoint(x: frame.size.width, y: 0))
         physicsBody?.categoryBitMask = ContactCategory.sidebounds.rawValue
         physicsBody?.contactTestBitMask = ContactCategory.hotdog.rawValue
         physicsBody?.restitution = 0.0
+
         let leftNode = SKSpriteNode()
         addChild(leftNode)
-        leftNode.physicsBody = SKPhysicsBody(edgeFrom: CGPoint(x: 0, y: self.frame.size.height + CGFloat(kMaxJumpHeight)), to: CGPoint(x: 0, y: CGFloat(-kMaxJumpHeight)))
+        leftNode.physicsBody = SKPhysicsBody(edgeFrom: CGPoint(x: 0, y: frame.size.height + CGFloat(kMaxJumpHeight)),
+                                             to: CGPoint(x: 0, y: CGFloat(-kMaxJumpHeight)))
         leftNode.physicsBody?.categoryBitMask = ContactCategory.leftbound.rawValue
         leftNode.physicsBody?.contactTestBitMask = ContactCategory.hotdog.rawValue
-        
+
         let rightNode = SKSpriteNode()
         addChild(rightNode)
-        rightNode.physicsBody = SKPhysicsBody(edgeFrom: CGPoint(x: self.frame.size.width, y: self.frame.size.height + CGFloat(kMaxJumpHeight)), to: CGPoint(x: self.frame.size.width, y: CGFloat(-kMaxJumpHeight)))
+        rightNode.physicsBody = SKPhysicsBody(edgeFrom: CGPoint(x: frame.size.width, y: frame.size.height + CGFloat(kMaxJumpHeight)),
+                                              to: CGPoint(x: frame.size.width, y: CGFloat(-kMaxJumpHeight)))
         rightNode.physicsBody?.categoryBitMask = ContactCategory.rightbound.rawValue
         rightNode.physicsBody?.contactTestBitMask = ContactCategory.hotdog.rawValue
+
         speed = 1
     }
-    
-    func createHotdog() {
-        // Safely select hotdog type from UserDefaults, fallback to .mrjj
-        let selectedRaw = UserDefaults.standard.integer(forKey: "UserDefaultsSelectCharacterKey")
-        let selectedType = Hotdog.HotdogType(rawValue: selectedRaw) ?? .mrjj
+
+    // MARK: - Hotdog
+
+    private func createHotdog() {
+        let selectedType = settings?.selectedHotdogType ?? .mrjj
         hotdog = Hotdog(hotdogType: selectedType)
-        
+
         hotdog.zPosition = 30
-        hotdog.position = CGPoint(x: self.frame.size.width/2.0, y: hotdog.size.height/2.0)
+        hotdog.position = CGPoint(x: frame.size.width / 2.0, y: hotdog.size.height / 2.0)
         hotdog.physicsBody?.categoryBitMask = ContactCategory.hotdog.rawValue
         hotdog.physicsBody?.collisionBitMask = ContactCategory.sidebounds.rawValue
-        | ContactCategory.rightbound.rawValue
-        | ContactCategory.leftbound.rawValue
+            | ContactCategory.rightbound.rawValue
+            | ContactCategory.leftbound.rawValue
         let run = SKAction.animate(with: hotdog.actions, timePerFrame: 0.2)
         hotdogRunForever = SKAction.repeatForever(run)
         hotdogMoveVelocity = 80.0
-        self.addChild(hotdog)
+        addChild(hotdog)
     }
-    
-    func setupCounterLabel() {
+
+    // MARK: - HUD Labels
+
+    private func setupCounterLabel() {
         scoreLabelNode = SKLabelNode(fontNamed: kScoreFontName)
         scoreLabelNode.text = "0"
         scoreLabelNode.fontSize = kScoreFontSize
         scoreLabelNode.fontColor = .white
         scoreLabelNode.zPosition = 40
         scoreLabelNode.verticalAlignmentMode = .top
-        // position near the top-center using scene coordinates
-        scoreLabelNode.position = CGPoint(x: self.frame.midX, y: self.frame.height - kScoreTopOffset)
+        scoreLabelNode.position = CGPoint(x: frame.midX, y: frame.height - kScoreTopOffset)
         addChild(scoreLabelNode)
     }
-    
-    override func update(_ currentTime: TimeInterval) {
-        guard let body = hotdog.physicsBody else { return }
-        let dy = body.velocity.dy
-        if dy > 0 && !isLanded {
-            // Prevent collisions if the hotdog is jumping -> no pathCategory
-            body.collisionBitMask = ContactCategory.sidebounds.rawValue | ContactCategory.rightbound.rawValue | ContactCategory.leftbound.rawValue
-        }
-        reusePath()
-        if hotdog.position.y < -100 && !isGameOver {
-            gameOver()
-        }
-        
-        if stations.count == 3 {
-            for i in 0...2 {
-                if stations[i].position.x >= -10 && !stations[i].isHidden && !stations[i].isShooting {
-                    stations[i].shootSauce()
-                }
-            }
-        }
+
+    private func setupHighestScoreLabel() {
+        let titleLabel = SKLabelNode()
+        titleLabel.text = "Highest"
+        addChild(titleLabel)
+        titleLabel.position = CGPoint(x: frame.width - 60, y: frame.height - 45)
+        titleLabel.fontColor = .white
+        titleLabel.fontSize = 18
+        titleLabel.fontName = "AmericanTypewriter"
+        titleLabel.verticalAlignmentMode = .center
+        titleLabel.horizontalAlignmentMode = .center
+        titleLabel.zPosition = 35
+
+        highestScoreLabel.text = String(settings?.highestScore ?? 0)
+        addChild(highestScoreLabel)
+        highestScoreLabel.position = CGPoint(x: titleLabel.position.x, y: frame.height - 65)
+        highestScoreLabel.fontColor = .white
+        highestScoreLabel.fontSize = 16
+        highestScoreLabel.fontName = "AmericanTypewriter"
+        highestScoreLabel.verticalAlignmentMode = .center
+        highestScoreLabel.horizontalAlignmentMode = .center
+        highestScoreLabel.zPosition = 35
     }
-    
-    func setupPaths() {
+
+    // MARK: - Platforms
+
+    private func setupPaths() {
         generatePaths()
         for path in paths {
             path.physicsBody?.categoryBitMask = ContactCategory.path.rawValue
             path.physicsBody?.contactTestBitMask = ContactCategory.hotdog.rawValue
             path.physicsBody?.collisionBitMask = ContactCategory.hotdog.rawValue
             addChild(path)
-            let moveDown = SKAction.moveBy(x: 0, y: -background.size.height, duration: 12)
-            let moveForever = SKAction.repeatForever(moveDown)
-            path.run(moveForever)
+            let moveDown = SKAction.moveBy(x: 0, y: -scrollingBackground.size.height, duration: 12)
+            path.run(SKAction.repeatForever(moveDown))
             path.speed = 0
         }
     }
-    
+
     private func generatePaths() {
-        let path = Path(position: CGPoint.zero)
-        let tx = p_randomPoint(min: Int(path.size.width / 2.0),
-                               max: Int(self.frame.size.width - path.size.width))
-        var firstPath = Path(position: CGPoint(x: tx,
-                                               y: kMinJumpHeight))
-        paths.append(firstPath)
-        var lastPath = firstPath
-        for _ in 0 ... 3 {
-            // safely get the last path instead of force-unwrapping
-            guard let maybeFirst = paths.last else { continue }
-            firstPath = maybeFirst
-            var x = p_randomPoint(min: Int(firstPath.size.width / 2.0),
-                                  max: Int(self.frame.size.width - firstPath.size.width))
-            
-            // if the distance between two paths (center to center) is greater than 1.5 paths
-            while abs(Int(lastPath.position.x) - x) > Int(kPathGapMultiplier * firstPath.size.width) {
-                x = p_randomPoint(min: Int(firstPath.size.width / 2.0),
-                                  max: Int(self.frame.size.width - firstPath.size.width))
+        let samplePath = Path(position: .zero)
+        let tx = randomPoint(min: Int(samplePath.size.width / 2.0),
+                             max: Int(frame.size.width - samplePath.size.width))
+        var currentPath = Path(position: CGPoint(x: tx, y: kMinJumpHeight))
+        paths.append(currentPath)
+        var previousPath = currentPath
+
+        for _ in 0...3 {
+            guard let last = paths.last else { continue }
+            currentPath = last
+            var x = randomPoint(min: Int(currentPath.size.width / 2.0),
+                                max: Int(frame.size.width - currentPath.size.width))
+            while abs(Int(previousPath.position.x) - x) > Int(kPathGapMultiplier * currentPath.size.width) {
+                x = randomPoint(min: Int(currentPath.size.width / 2.0),
+                                max: Int(frame.size.width - currentPath.size.width))
             }
-            
-            let y = Int(firstPath.frame.origin.y) + kMinJumpHeight + kPathYIncrement
-            let path = Path(position: CGPoint(x: x, y: y))
-            lastPath = path
-            path.tag = firstPath.tag + 1
-            paths.append(path)
+            let y = Int(currentPath.frame.origin.y) + kMinJumpHeight + kPathYIncrement
+            let newPath = Path(position: CGPoint(x: x, y: y))
+            previousPath = newPath
+            newPath.tag = currentPath.tag + 1
+            paths.append(newPath)
         }
     }
-    
-    private func p_randomPoint(min: Int, max: Int) -> Int {
+
+    private func randomPoint(min: Int, max: Int) -> Int {
         guard max >= min else { return min }
         return Int.random(in: min...max)
     }
-    
+
     private func reusePath() {
         for path in paths {
-            if path.position.y < 0 {
-                path.reset()
-                
-                var minLeft = 0
-                if path.tag == 0 {
-                    reuseCount += 1
+            guard path.position.y < 0 else { continue }
+            path.reset()
+
+            var minLeft = 0
+            if path.tag == 0 {
+                reuseCount += 1
+            }
+            if reuseCount % kNumOfStairsToUpdate == 0 {
+                let level = min(reuseCount / kNumOfStairsToUpdate, 4)
+                if let newType = PathType(rawValue: level) {
+                    path.type = newType
                 }
-                if reuseCount % kNumOfStairsToUpdate == 0 { // every kNumOfStairsToUpdate * 5 stairs change the stair style
-                    let level = reuseCount / kNumOfStairsToUpdate > 4 ? 4 : reuseCount / kNumOfStairsToUpdate
-                    if let newType = PathType(rawValue: level) {
-                        path.type = newType
-                    }
-                    
-                    if level >= 2 && level < 5 {
-                        // guard stations access - if stations are not yet created this will safely fallback to 0
-                        minLeft = Int(stations.first?.size.width ?? 0)
-                        if path.tag >= 3 {
-                            stations.forEach({ (station) in
-                                station.isHidden = false
-                                if let sType = StationType(rawValue: level) {
-                                    station.stationType = sType
-                                }
-                            })
+                if level >= 2 && level < 5 {
+                    minLeft = Int(stations.first?.size.width ?? 0)
+                    if path.tag >= 3 {
+                        stations.forEach { station in
+                            station.isHidden = false
+                            if let sType = StationType(rawValue: level) {
+                                station.stationType = sType
+                            }
                         }
                     }
                 }
-                
-                
-                
-                var x = p_randomPoint(min: Int(path.size.width / 2.0),
-                                      max: Int(self.frame.size.width - path.size.width))
-                
-                // if the distance between two paths (center to center) is greater than 1.8 paths
-                var attempts = 0
-                while (paths.last.map { abs(Int($0.position.x) - x) } ?? 0) > Int(kPathGapMultiplier * path.size.width) || x <= minLeft {
-                    x = p_randomPoint(min: Int(path.size.width / 2.0),
-                                      max: Int(self.frame.size.width - path.size.width))
-                    attempts += 1
-                    if attempts >= kPathMaxAttempts { break }
-                }
-                guard let last = paths.last else { continue }
-                let y = Int(last.frame.origin.y) + kMinJumpHeight + 30
-                path.position = CGPoint(x: x, y: y)
-                if let idx = paths.firstIndex(of: path) {
-                    paths.remove(at: idx)
-                    paths.append(path)
-                }
+            }
+
+            var x = randomPoint(min: Int(path.size.width / 2.0),
+                                max: Int(frame.size.width - path.size.width))
+            var attempts = 0
+            while (paths.last.map { abs(Int($0.position.x) - x) } ?? 0) > Int(kPathGapMultiplier * path.size.width) || x <= minLeft {
+                x = randomPoint(min: Int(path.size.width / 2.0),
+                                max: Int(frame.size.width - path.size.width))
+                attempts += 1
+                if attempts >= kPathMaxAttempts { break }
+            }
+            guard let last = paths.last else { continue }
+            let y = Int(last.frame.origin.y) + kMinJumpHeight + 30
+            path.position = CGPoint(x: x, y: y)
+            if let idx = paths.firstIndex(of: path) {
+                paths.remove(at: idx)
+                paths.append(path)
             }
         }
     }
-    
-    func createStation() {
-        // generates
+
+    // MARK: - Stations (Enemies)
+
+    private func createStation() {
         for i in 0...2 {
             let station = Station()
-            let y = Int(self.size.height / 4.0) * (i + 1)
-            station.position = CGPoint(x: i == 1 ? -station.size.width/2.0 : 0, y: CGFloat(y))
+            let y = Int(size.height / 4.0) * (i + 1)
+            station.position = CGPoint(x: i == 1 ? -station.size.width / 2.0 : 0, y: CGFloat(y))
             station.tag = i
             stations.append(station)
             addChild(station)
@@ -359,95 +368,95 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             }
         }
     }
-    
-    func setupHighestScoreLabel() {
-        let highestScoreLab = SKLabelNode()
-        highestScoreLab.text = "Highest"
-        addChild(highestScoreLab)
-        highestScoreLab.position = CGPoint(x: self.frame.width - 60, y: self.frame.height - 45)
-        highestScoreLab.fontColor = UIColor.white
-        highestScoreLab.fontSize = 18
-        highestScoreLab.fontName = "AmericanTypewriter"
-        highestScoreLab.verticalAlignmentMode = .center
-        highestScoreLab.horizontalAlignmentMode = .center
-        highestScoreLab.zPosition = 35
-        
-        highest.text = String(UserDefaults.standard.integer(forKey: "UserDefaultsHighestScoreKey"))
-        addChild(highest)
-        highest.position = CGPoint(x: highestScoreLab.position.x, y: self.frame.height - 65)
-        highest.fontColor = UIColor.white
-        highest.fontSize = 16
-        highest.fontName = "AmericanTypewriter"
-        highest.verticalAlignmentMode = .center
-        highest.horizontalAlignmentMode = .center
-        highest.zPosition = 35
-    }
-    
-    // ====================================================================================================
-    
+
+    // MARK: - Game Over
+
     func gameOver() {
-        isGameOver = true // needs to set this first to prevent updating getting called again
+        isGameOver = true
         if isSoundEffectOn {
             run(fallingSound)
         }
         speed = 0
-        gameSceneDelegate?.gameSceneGameEnded()
+        gameSceneDelegate?.gameSceneDidEnd()
         isMusicOn = false
         isUserInteractionEnabled = false
         hotdog.speed = 0
     }
-    
-    //MARK: Collision Detection
+
+    // MARK: - Game Loop
+
+    override func update(_ currentTime: TimeInterval) {
+        guard let body = hotdog.physicsBody else { return }
+        let dy = body.velocity.dy
+        if dy > 0 && !isLanded {
+            body.collisionBitMask = ContactCategory.sidebounds.rawValue
+                | ContactCategory.rightbound.rawValue
+                | ContactCategory.leftbound.rawValue
+        }
+        reusePath()
+
+        if hotdog.position.y < -100 && !isGameOver {
+            gameOver()
+        }
+
+        if stations.count == 3 {
+            for i in 0...2 {
+                if stations[i].position.x >= -10 && !stations[i].isHidden && !stations[i].isShooting {
+                    stations[i].shootSauce()
+                }
+            }
+        }
+    }
+
+    // MARK: - Collision Detection
+
     func didBegin(_ contact: SKPhysicsContact) {
         let bodyA = contact.bodyA
         let bodyB = contact.bodyB
-        
+
         func bodyHas(_ body: SKPhysicsBody, _ category: ContactCategory) -> Bool {
-            return (body.categoryBitMask & category.rawValue) != 0
+            (body.categoryBitMask & category.rawValue) != 0
         }
-        
-        // Update landed state safely
+
         if let hBody = hotdog.physicsBody {
             let dy = hBody.velocity.dy
             isLanded = dy <= 1.0 && dy >= 0.0
         }
-        
-        // sidebounds
+
+        // Ground
         if bodyHas(bodyA, .sidebounds) || bodyHas(bodyB, .sidebounds) {
             isLanded = true
-#if DEBUG
-            print("At ground")
-#endif
         }
-        
-        // leftbound / rightbound bounce handling
+
+        // Wall bounces
         if bodyHas(bodyA, .leftbound) || bodyHas(bodyB, .leftbound) {
             hotdog.xScale *= hotdog.xScale > 0 ? 1 : -1
             hotdog.removeAction(forKey: "moveLeft")
             let moveRight = SKAction.moveBy(x: hotdogMoveVelocity, y: 0, duration: 1)
-            let moveForever = SKAction.repeatForever(moveRight)
-            hotdog.run(moveForever, withKey: "moveRight")
+            hotdog.run(SKAction.repeatForever(moveRight), withKey: "moveRight")
         } else if bodyHas(bodyA, .rightbound) || bodyHas(bodyB, .rightbound) {
             hotdog.xScale *= hotdog.xScale > 0 ? -1 : 1
             hotdog.removeAction(forKey: "moveRight")
             let moveLeft = SKAction.moveBy(x: -hotdogMoveVelocity, y: 0, duration: 1)
-            let moveForever = SKAction.repeatForever(moveLeft)
-            hotdog.run(moveForever, withKey: "moveLeft")
+            hotdog.run(SKAction.repeatForever(moveLeft), withKey: "moveLeft")
         }
-        
-        // path collision
+
+        // Platform landing
         if bodyHas(bodyA, .path) || bodyHas(bodyB, .path) {
             let currPathBody = bodyHas(bodyA, .path) ? bodyA : bodyB
             if let currPath = currPathBody.node as? Path, let hBody = hotdog.physicsBody {
                 let dy = hBody.velocity.dy
                 if dy > 0 {
-                    // going up: disable path collision
-                    hBody.collisionBitMask = ContactCategory.sidebounds.rawValue | ContactCategory.rightbound.rawValue | ContactCategory.leftbound.rawValue
+                    hBody.collisionBitMask = ContactCategory.sidebounds.rawValue
+                        | ContactCategory.rightbound.rawValue
+                        | ContactCategory.leftbound.rawValue
                 } else {
-                    // check if hotdog feet are on or above path
-                    if (hotdog.position.y - hotdog.size.height / 2.0 >= currPath.position.y + currPath.size.height / 2 - 20) {
+                    if hotdog.position.y - hotdog.size.height / 2.0 >= currPath.position.y + currPath.size.height / 2 - 20 {
                         hBody.contactTestBitMask = ContactCategory.path.rawValue | ContactCategory.sauce.rawValue
-                        hBody.collisionBitMask = ContactCategory.path.rawValue | ContactCategory.sidebounds.rawValue | ContactCategory.leftbound.rawValue | ContactCategory.rightbound.rawValue
+                        hBody.collisionBitMask = ContactCategory.path.rawValue
+                            | ContactCategory.sidebounds.rawValue
+                            | ContactCategory.leftbound.rawValue
+                            | ContactCategory.rightbound.rawValue
                         if !currPath.isVisited {
                             score += 1
                             currPath.isVisited = true
@@ -457,69 +466,61 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                 }
             }
         }
-        
-        // sauce collision -> safer handling
+
+        // Sauce hit
         if (bodyHas(bodyA, .sauce) || bodyHas(bodyB, .sauce)) && !isGameOver {
             let sauceBody = bodyHas(bodyA, .sauce) ? bodyA : bodyB
-            // remove the sauce node safely (node is already an optional SKNode)
             sauceBody.node?.removeFromParent()
-#if DEBUG
-            print("Got shot")
-#endif
             gameOver()
         }
     }
-    
-    func touchDown(atPoint pos : CGPoint) {
-        if pos.x < self.frame.size.width / 5.0 {
+
+    // MARK: - Touch Input
+
+    private func touchDown(atPoint pos: CGPoint) {
+        if pos.x < frame.size.width / 5.0 {
             if !hotdog.hasActions() {
                 hotdog.run(hotdogRunForever, withKey: "hotdogRunForever")
             }
             hotdog.xScale *= hotdog.xScale > 0 ? -1 : 1
             hotdog.removeAction(forKey: "moveRight")
             let moveLeft = SKAction.moveBy(x: -hotdogMoveVelocity, y: 0, duration: 1)
-            let moveForever = SKAction.repeatForever(moveLeft)
-            hotdog.run(moveForever, withKey: "moveLeft")
-        } else if pos.x > 4 * self.frame.size.width / 5.0 {
+            hotdog.run(SKAction.repeatForever(moveLeft), withKey: "moveLeft")
+        } else if pos.x > 4 * frame.size.width / 5.0 {
             if !hotdog.hasActions() {
                 hotdog.run(hotdogRunForever, withKey: "hotdogRunForever")
             }
             hotdog.xScale *= hotdog.xScale > 0 ? 1 : -1
             hotdog.removeAction(forKey: "moveLeft")
             let moveRight = SKAction.moveBy(x: hotdogMoveVelocity, y: 0, duration: 1)
-            let moveForever = SKAction.repeatForever(moveRight)
-            hotdog.run(moveForever, withKey: "moveRight")
+            hotdog.run(SKAction.repeatForever(moveRight), withKey: "moveRight")
         } else {
-            // middle area: begin charging jump (handled in touchesBegan)
             if !hotdog.hasActions() {
                 hotdog.texture = hotdog.hotdogTexture
             }
-            // Visual/audio feedback could be added here for charge start
         }
     }
-    
+
     private func applyJump(for duration: TimeInterval) {
-        // map hold duration to impulse [minJumpImpulse .. maxJumpImpulse]
         guard isLanded else { return }
         let clamped = min(duration, maxChargeDuration)
         let t = CGFloat(clamped / maxChargeDuration)
         let impulse = minJumpImpulse + t * (maxJumpImpulse - minJumpImpulse)
-        let diff = CGVector(dx: 0, dy: impulse)
-        hotdog.physicsBody?.applyImpulse(diff)
+        hotdog.physicsBody?.applyImpulse(CGVector(dx: 0, dy: impulse))
         if isSoundEffectOn {
             run(jumpSound)
         }
         isLanded = false
-        
-        // Start moving background if hotdog high enough
-        if hotdog.position.y > self.frame.size.height / 2.0 && background.speed == 0 {
+
+        // Start scrolling once hotdog is high enough
+        if hotdog.position.y > frame.size.height / 2.0 && scrollingBackground.speed == 0 {
             initialBackground.speed = kGameSpeed
             for bg in backgrounds { bg.speed = kGameSpeed }
             for path in paths { path.speed = kGameSpeed }
-            self.physicsBody?.categoryBitMask = ContactCategory.hotdog.rawValue
+            physicsBody?.categoryBitMask = ContactCategory.hotdog.rawValue
         }
-        
-        // Level-up tuning (keeps previous behavior)
+
+        // Level-up difficulty scaling
         if score % kLevel == 0 && score > 0 {
             hotdog.physicsBody?.mass += 0.001
             for bg in backgrounds { bg.speed += kSpeedIncrement }
@@ -527,31 +528,28 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             for path in paths { path.speed += kSpeedIncrement }
         }
     }
-    
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         for t in touches {
             let pos = t.location(in: self)
-            self.touchDown(atPoint: pos)
-            // if in middle area, record start time for charging
-            if pos.x >= self.frame.size.width / 5.0 && pos.x <= 4 * self.frame.size.width / 5.0 {
+            touchDown(atPoint: pos)
+            if pos.x >= frame.size.width / 5.0 && pos.x <= 4 * frame.size.width / 5.0 {
                 touchStartTimes[ObjectIdentifier(t)] = t.timestamp
             }
         }
     }
-    
+
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
         for t in touches {
             let id = ObjectIdentifier(t)
             if let start = touchStartTimes[id] {
-                let duration = t.timestamp - start
-                applyJump(for: duration)
+                applyJump(for: t.timestamp - start)
                 touchStartTimes[id] = nil
             }
         }
     }
-    
+
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        // Clean up any pending charge state
         for t in touches { touchStartTimes[ObjectIdentifier(t)] = nil }
     }
 }

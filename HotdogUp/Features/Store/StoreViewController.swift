@@ -25,7 +25,7 @@ class StoreViewController: UIViewController, UICollectionViewDelegate, UICollect
     
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
-        let item = UserDefaults.standard.integer(forKey: "UserDefaultsSelectCharacterKey")
+        let item = UserDefaults.standard.integer(forKey: UserDefaultsKey.selectedCharacter)
         print(item)
         let indexPath = IndexPath(item: item, section: 0)
         collectionView.selectItem(at: indexPath, animated: true, scrollPosition: UICollectionView.ScrollPosition(rawValue: 0))
@@ -113,6 +113,6 @@ class StoreViewController: UIViewController, UICollectionViewDelegate, UICollect
     }
     
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        UserDefaults.standard.set(indexPath.item, forKey: "UserDefaultsSelectCharacterKey")
+        UserDefaults.standard.set(indexPath.item, forKey: UserDefaultsKey.selectedCharacter)
     }
 }
