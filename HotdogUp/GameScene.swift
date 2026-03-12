@@ -101,12 +101,21 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private var jumpSound = SKAction()
     private var fallingSound = SKAction()
 
-    // MARK: - Charged Jump
+    // MARK: - Charged Jump (3-tier system)
 
     private var touchStartTimes: [ObjectIdentifier: TimeInterval] = [:]
-    private let maxChargeDuration: TimeInterval = 0.6
-    private let minJumpImpulse: CGFloat = CGFloat(kMinJumpHeight + 5)
-    private let maxJumpImpulse: CGFloat = CGFloat(kMaxJumpHeight)
+    private let baseJumpImpulse: CGFloat = CGFloat(kMinJumpHeight + 5)
+
+    // Charge bar UI
+    private var chargeBarBackground = SKShapeNode()
+    private var chargeBarFill = SKShapeNode()
+    private var chargeTierLabel = SKLabelNode()
+    private var isCharging = false
+    private var chargeStartTime: TimeInterval = 0
+
+    // Reward system
+    private var currentAccessory: SKSpriteNode?
+    private var rewardCount = 0
 
     // MARK: - Scene Lifecycle
 
@@ -125,6 +134,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             createStation()
             jumpSound = SKAction.playSoundFileNamed("\(hotdog.hotdogType.name)_hop", waitForCompletion: false)
             fallingSound = SKAction.playSoundFileNamed("\(hotdog.hotdogType.name)_fall", waitForCompletion: true)
+            setupChargeBar()
         }
         MusicPlayer.loadBackgroundMusic()
         isMusicOn ? MusicPlayer.resumePlay() : MusicPlayer.player.stop()
@@ -140,14 +150,18 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         createHotdog()
         createBackground()
         createStation()
+        setupChargeBar()
 
         score = 0
         reuseCount = 0
+        rewardCount = 0
+        currentAccessory = nil
         scoreLabelNode.text = "0"
 
         gamePaused = false
         isGameOver = false
         isLanded = true
+        isCharging = false
         isUserInteractionEnabled = true
 
         if settings?.isMusicOn == true {
@@ -259,6 +273,94 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         highestScoreLabel.zPosition = 35
     }
 
+    // MARK: - Charge Bar UI
+
+    private func setupChargeBar() {
+        let barWidth: CGFloat = 80
+        let barHeight: CGFloat = 10
+
+        // Background (dark outline)
+        chargeBarBackground = SKShapeNode(rectOf: CGSize(width: barWidth, height: barHeight), cornerRadius: 4)
+        chargeBarBackground.fillColor = UIColor(white: 0, alpha: 0.5)
+        chargeBarBackground.strokeColor = .white
+        chargeBarBackground.lineWidth = 1.5
+        chargeBarBackground.zPosition = 50
+        chargeBarBackground.alpha = 0
+        addChild(chargeBarBackground)
+
+        // Fill (grows from left to right)
+        chargeBarFill = SKShapeNode(rectOf: CGSize(width: 0, height: barHeight - 2), cornerRadius: 3)
+        chargeBarFill.fillColor = .green
+        chargeBarFill.strokeColor = .clear
+        chargeBarFill.zPosition = 51
+        chargeBarFill.alpha = 0
+        addChild(chargeBarFill)
+
+        // Tier label (shows "1x", "1.5x", "2x")
+        chargeTierLabel = SKLabelNode(fontNamed: kScoreFontName)
+        chargeTierLabel.fontSize = 22
+        chargeTierLabel.fontColor = .yellow
+        chargeTierLabel.zPosition = 52
+        chargeTierLabel.alpha = 0
+        chargeTierLabel.verticalAlignmentMode = .bottom
+        addChild(chargeTierLabel)
+    }
+
+    /// Computes the jump tier from hold duration and returns (multiplier, tierName)
+    private func jumpTier(for duration: TimeInterval) -> (multiplier: CGFloat, name: String) {
+        let clamped = min(duration, kMaxChargeDuration)
+        if clamped >= kJumpTier3Threshold {
+            return (kJumpTier3Multiplier, "1.5x")
+        } else if clamped >= kJumpTier2Threshold {
+            return (kJumpTier2Multiplier, "1.2x")
+        } else {
+            return (kJumpTier1Multiplier, "1x")
+        }
+    }
+
+    private func updateChargeBar(progress: CGFloat, tier: String) {
+        let barWidth: CGFloat = 80
+        let barHeight: CGFloat = 10
+        let fillWidth = barWidth * min(progress, 1.0)
+
+        // Position above hotdog
+        let barPos = CGPoint(x: hotdog.position.x, y: hotdog.position.y + hotdog.size.height / 2.0 + 20)
+        chargeBarBackground.position = barPos
+        chargeBarBackground.alpha = 1
+
+        // Rebuild fill shape to match current width
+        chargeBarFill.removeFromParent()
+        chargeBarFill = SKShapeNode(rectOf: CGSize(width: max(fillWidth, 1), height: barHeight - 2), cornerRadius: 3)
+        chargeBarFill.zPosition = 51
+        // Offset so the fill grows from the left edge of the bar
+        chargeBarFill.position = CGPoint(x: barPos.x - (barWidth - fillWidth) / 2.0, y: barPos.y)
+
+        // Color by tier
+        switch tier {
+        case "1.5x":
+            chargeBarFill.fillColor = .red
+        case "1.2x":
+            chargeBarFill.fillColor = .orange
+        default:
+            chargeBarFill.fillColor = .green
+        }
+        chargeBarFill.strokeColor = .clear
+        chargeBarFill.alpha = 1
+        addChild(chargeBarFill)
+
+        // Tier label
+        chargeTierLabel.text = tier
+        chargeTierLabel.position = CGPoint(x: barPos.x, y: barPos.y + barHeight / 2.0 + 2)
+        chargeTierLabel.alpha = 1
+    }
+
+    private func hideChargeBar() {
+        chargeBarBackground.alpha = 0
+        chargeBarFill.alpha = 0
+        chargeTierLabel.alpha = 0
+        isCharging = false
+    }
+
     // MARK: - Platforms
 
     private func setupPaths() {
@@ -318,7 +420,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                 if let newType = PathType(rawValue: level) {
                     path.type = newType
                 }
-                if level >= 2 && level < 5 {
+                // Ketchup starts at level 1 (~10 platforms), escalates to wasabi/water
+                if level >= 1 && level < 5 {
                     minLeft = Int(stations.first?.size.width ?? 0)
                     if path.tag >= 3 {
                         stations.forEach { station in
@@ -369,6 +472,60 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
 
+    // MARK: - Reward System
+
+    private func checkAndAwardReward() {
+        let milestone = score / kRewardInterval
+        guard milestone > rewardCount else { return }
+        rewardCount = milestone
+
+        // Pick a random accessory
+        let allTypes = Hotdog.AccessoryType.allCases
+        let randomType = allTypes[Int.random(in: 0..<allTypes.count)]
+        hotdog.attachAccessory(randomType)
+
+        // Celebration burst effect
+        showRewardCelebration()
+    }
+
+    private func showRewardCelebration() {
+        // Flash "POWER UP!" label
+        let label = SKLabelNode(fontNamed: kScoreFontName)
+        label.text = "POWER UP!"
+        label.fontSize = 32
+        label.fontColor = .yellow
+        label.zPosition = 60
+        label.position = CGPoint(x: frame.midX, y: frame.midY)
+        addChild(label)
+
+        let scaleUp = SKAction.scale(to: 1.5, duration: 0.2)
+        let scaleDown = SKAction.scale(to: 1.0, duration: 0.1)
+        let fadeOut = SKAction.fadeOut(withDuration: 0.6)
+        let moveUp = SKAction.moveBy(x: 0, y: 60, duration: 0.9)
+        let group = SKAction.group([SKAction.sequence([scaleUp, scaleDown, fadeOut]), moveUp])
+        label.run(SKAction.sequence([group, SKAction.removeFromParent()]))
+
+        // Sparkle particles around the hotdog
+        for _ in 0..<8 {
+            let spark = SKShapeNode(circleOfRadius: CGFloat.random(in: 2...4))
+            spark.fillColor = [UIColor.yellow, UIColor.orange, UIColor.cyan, UIColor.green].randomElement() ?? .yellow
+            spark.strokeColor = .clear
+            spark.zPosition = 55
+            spark.position = hotdog.position
+            spark.glowWidth = 2
+            addChild(spark)
+
+            let dx = CGFloat.random(in: -50...50)
+            let dy = CGFloat.random(in: 20...80)
+            let burst = SKAction.moveBy(x: dx, y: dy, duration: 0.5)
+            let fade = SKAction.fadeOut(withDuration: 0.4)
+            spark.run(SKAction.sequence([
+                SKAction.group([burst, fade]),
+                SKAction.removeFromParent()
+            ]))
+        }
+    }
+
     // MARK: - Game Over
 
     func gameOver() {
@@ -405,6 +562,14 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                     stations[i].shootSauce()
                 }
             }
+        }
+
+        // Update charge bar while holding
+        if isCharging && isLanded {
+            let elapsed = CACurrentMediaTime() - chargeStartTime
+            let progress = CGFloat(min(elapsed / kMaxChargeDuration, 1.0))
+            let tier = jumpTier(for: elapsed)
+            updateChargeBar(progress: progress, tier: tier.name)
         }
     }
 
@@ -460,6 +625,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                         if !currPath.isVisited {
                             score += 1
                             currPath.isVisited = true
+                            checkAndAwardReward()
                         }
                         isLanded = true
                     }
@@ -503,14 +669,20 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
     private func applyJump(for duration: TimeInterval) {
         guard isLanded else { return }
-        let clamped = min(duration, maxChargeDuration)
-        let t = CGFloat(clamped / maxChargeDuration)
-        let impulse = minJumpImpulse + t * (maxJumpImpulse - minJumpImpulse)
+
+        // Determine tier from hold duration
+        let tier = jumpTier(for: duration)
+        let impulse = baseJumpImpulse * tier.multiplier
+
         hotdog.physicsBody?.applyImpulse(CGVector(dx: 0, dy: impulse))
         if isSoundEffectOn {
             run(jumpSound)
         }
         isLanded = false
+        hideChargeBar()
+
+        // Flash the tier label briefly after jump
+        showJumpTierFlash(tier.name)
 
         // Start scrolling once hotdog is high enough
         if hotdog.position.y > frame.size.height / 2.0 && scrollingBackground.speed == 0 {
@@ -529,12 +701,41 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
     }
 
+    /// Shows a brief floating label ("1x", "1.5x", "2x") after a jump for tactile feedback.
+    private func showJumpTierFlash(_ tierName: String) {
+        let label = SKLabelNode(fontNamed: kScoreFontName)
+        label.text = tierName
+        label.fontSize = 28
+        label.zPosition = 55
+        label.position = CGPoint(x: hotdog.position.x, y: hotdog.position.y + hotdog.size.height / 2.0 + 10)
+
+        switch tierName {
+        case "1.5x":
+            label.fontColor = .red
+        case "1.2x":
+            label.fontColor = .orange
+        default:
+            label.fontColor = .green
+        }
+
+        addChild(label)
+        let floatUp = SKAction.moveBy(x: 0, y: 40, duration: 0.5)
+        let fade = SKAction.fadeOut(withDuration: 0.4)
+        let group = SKAction.group([floatUp, fade])
+        label.run(SKAction.sequence([group, SKAction.removeFromParent()]))
+    }
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         for t in touches {
             let pos = t.location(in: self)
             touchDown(atPoint: pos)
+            // Middle area: start charging
             if pos.x >= frame.size.width / 5.0 && pos.x <= 4 * frame.size.width / 5.0 {
                 touchStartTimes[ObjectIdentifier(t)] = t.timestamp
+                if isLanded {
+                    isCharging = true
+                    chargeStartTime = CACurrentMediaTime()
+                }
             }
         }
     }
@@ -547,9 +748,13 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                 touchStartTimes[id] = nil
             }
         }
+        if touchStartTimes.isEmpty {
+            hideChargeBar()
+        }
     }
 
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
         for t in touches { touchStartTimes[ObjectIdentifier(t)] = nil }
+        hideChargeBar()
     }
 }

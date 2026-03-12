@@ -10,26 +10,23 @@ import UIKit
 import SpriteKit
 
 enum StationType: Int {
-    case ketchup = 2 //default level 2
-    case wasabi = 3
-    case water = 4
-    
-    var name : String {
+    case ketchup = 1  // lowered: appears at level 1 (~10 platforms) for earlier action
+    case wasabi = 2
+    case water = 3
+
+    var name: String {
         switch self {
         case .ketchup: return "ketchup"
         case .wasabi: return "wasabi"
         case .water: return "water"
         }
     }
-    
+
     var shootSpeed: TimeInterval {
         switch self {
-        case .ketchup:
-            return 4
-        case .wasabi:
-            return 3
-        case .water:
-            return 2
+        case .ketchup: return 4
+        case .wasabi: return 3
+        case .water: return 2
         }
     }
 }
