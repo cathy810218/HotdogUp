@@ -76,4 +76,11 @@ final class GameSettings {
         get { persistence.float(forKey: UserDefaultsKey.resumeSpeed) }
         set { persistence.set(newValue, forKey: UserDefaultsKey.resumeSpeed) }
     }
+
+    // MARK: - Death Count (for ad frequency)
+
+    var deathCount: Int {
+        get { persistence.int(forKey: UserDefaultsKey.deathCount) }
+        set { persistence.set(newValue, forKey: UserDefaultsKey.deathCount) }
+    }
 }

@@ -42,11 +42,16 @@ final class GameViewModel {
         }
     }
 
+    // MARK: - Ad frequency
+
+    private let adInterval = 5  // show ad every N deaths
+
     // MARK: - Callbacks (view binding)
 
     var onPlayStateChanged: ((PlayState) -> Void)?
     var onScoreChanged: ((Int) -> Void)?
     var onShowShare: ((String, UIImage?) -> Void)?
+    var onShowAd: (() -> Void)?
     var onIAPCompleted: ((Bool) -> Void)?
     var onIAPError: ((String) -> Void)?
 
@@ -75,6 +80,13 @@ final class GameViewModel {
     func gameOver() {
         playState = .gameOver
         analytics.log(.gameOver(score: score))
+
+        // TODO: Re-enable when Google AdMob is integrated
+        // Track deaths and show ad every N deaths (unless ads removed)
+        // settings.deathCount += 1
+        // if !settings.hasRemovedAds && settings.deathCount % adInterval == 0 {
+        //     onShowAd?()
+        // }
     }
 
     func pause() {

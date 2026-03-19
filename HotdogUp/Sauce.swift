@@ -10,17 +10,21 @@ import UIKit
 import SpriteKit
 
 class Sauce: SKSpriteNode {
+    let sauceType: StationType
+
     init(type: StationType) {
+        self.sauceType = type
         let sauceTexture = SKTexture(imageNamed: "\(type.name)_short")
         super.init(texture: sauceTexture, color: .clear, size: sauceTexture.size())
 
         self.physicsBody = SKPhysicsBody(texture: sauceTexture, size: self.size)
         self.physicsBody?.mass = 0.2
-        self.physicsBody?.affectedByGravity = true
+        self.physicsBody?.affectedByGravity = false
         self.physicsBody?.allowsRotation = false
         self.physicsBody?.isDynamic = true
         self.physicsBody?.contactTestBitMask = ContactCategory.hotdog.rawValue
         self.physicsBody?.categoryBitMask = ContactCategory.sauce.rawValue
+        self.physicsBody?.collisionBitMask = 0
     }
     
     required init?(coder aDecoder: NSCoder) {

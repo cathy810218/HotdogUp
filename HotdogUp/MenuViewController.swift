@@ -7,6 +7,7 @@
 //
 
 import UIKit
+import StoreKit
 
 class MenuViewController: UIViewController {
     var gameVC: GameViewController?
@@ -14,6 +15,8 @@ class MenuViewController: UIViewController {
     
     override func viewDidLoad() {
         super.viewDidLoad()
+
+        Container.shared.settings.registerDefaultsIfNeeded()
     }
     
     @IBAction func startButtonPressed(_ sender: Any) {
@@ -41,11 +44,8 @@ class MenuViewController: UIViewController {
     }
     
     @IBAction func rateButtonPressed(_ sender: UIButton) {
-        guard let url = URL(string: "reviewUrlString") else { return }
-        UIApplication.shared.open(url, options: [:]) { success in
-            if !success {
-                print("Failed to open App Store URL")
-            }
+        if let windowScene = view.window?.windowScene {
+            SKStoreReviewController.requestReview(in: windowScene)
         }
     }
 }

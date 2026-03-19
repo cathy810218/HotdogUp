@@ -25,13 +25,14 @@ class Hotdog: SKSpriteNode {
         }
     }
 
-    /// Types of fun accessories that can be earned every N platforms.
+    /// Accessories awarded in fixed order every kRewardInterval platforms.
+    /// The sequence repeats, so accessories accumulate on the hotdog.
     enum AccessoryType: CaseIterable {
-        case partyHat
-        case sunglasses
         case crown
-        case bowtie
+        case cape
+        case sunglasses
         case halo
+        case bowtie
         case headband
     }
 
@@ -40,8 +41,8 @@ class Hotdog: SKSpriteNode {
     var hotdogTexture: SKTexture?
     var shotCount = 0
 
-    /// The currently displayed accessory node (if any).
-    private(set) var accessoryNode: SKNode?
+    /// All currently displayed accessory nodes, accumulated over milestones.
+    private(set) var accessoryNodes: [SKNode] = []
 
     init(hotdogType: HotdogType) {
         let textureName = "\(hotdogType.name)_11"
@@ -75,19 +76,16 @@ class Hotdog: SKSpriteNode {
 
     // MARK: - Accessory System
 
-    /// Attaches a procedurally drawn accessory on top of the hotdog.
+    /// Adds the next accessory in the fixed sequence. Accessories accumulate.
     func attachAccessory(_ type: AccessoryType) {
-        // Remove previous accessory
-        accessoryNode?.removeFromParent()
-
         let node: SKNode
         switch type {
-        case .partyHat:
-            node = makePartyHat()
-        case .sunglasses:
-            node = makeSunglasses()
         case .crown:
             node = makeCrown()
+        case .cape:
+            node = makeCape()
+        case .sunglasses:
+            node = makeSunglasses()
         case .bowtie:
             node = makeBowtie()
         case .halo:
@@ -98,7 +96,7 @@ class Hotdog: SKSpriteNode {
 
         node.zPosition = 5
         addChild(node)
-        accessoryNode = node
+        accessoryNodes.append(node)
 
         // Pop-in animation
         node.setScale(0.01)
@@ -108,33 +106,35 @@ class Hotdog: SKSpriteNode {
         ]))
     }
 
-    func removeAccessory() {
-        accessoryNode?.removeFromParent()
-        accessoryNode = nil
+    func removeAllAccessories() {
+        accessoryNodes.forEach { $0.removeFromParent() }
+        accessoryNodes.removeAll()
     }
 
     // MARK: - Procedural Accessory Builders
 
-    private func makePartyHat() -> SKNode {
-        let path = CGMutablePath()
-        path.move(to: CGPoint(x: 0, y: 20))
-        path.addLine(to: CGPoint(x: -10, y: 0))
-        path.addLine(to: CGPoint(x: 10, y: 0))
-        path.closeSubpath()
-        let hat = SKShapeNode(path: path)
-        hat.fillColor = .red
-        hat.strokeColor = .yellow
-        hat.lineWidth = 1.5
-        hat.position = CGPoint(x: 0, y: size.height / 2.0 - 2)
+    private func makeCape() -> SKNode {
+        let capePath = CGMutablePath()
+        capePath.move(to: CGPoint(x: -10, y: 0))
+        capePath.addLine(to: CGPoint(x: -14, y: -22))
+        capePath.addQuadCurve(to: CGPoint(x: 14, y: -22), control: CGPoint(x: 0, y: -28))
+        capePath.addLine(to: CGPoint(x: 10, y: 0))
+        capePath.closeSubpath()
+        let cape = SKShapeNode(path: capePath)
+        cape.fillColor = UIColor(red: 0.8, green: 0.1, blue: 0.1, alpha: 0.9)
+        cape.strokeColor = UIColor(red: 0.6, green: 0, blue: 0, alpha: 1)
+        cape.lineWidth = 1.0
+        cape.position = CGPoint(x: 0, y: -size.height / 2.0 + 5)
+        cape.zPosition = -1
 
-        // Little pom-pom on top
-        let pom = SKShapeNode(circleOfRadius: 3)
-        pom.fillColor = .yellow
-        pom.strokeColor = .clear
-        pom.position = CGPoint(x: 0, y: 20)
-        hat.addChild(pom)
+        // Gentle flutter animation
+        let flutter = SKAction.sequence([
+            SKAction.scaleX(to: 1.1, duration: 0.4),
+            SKAction.scaleX(to: 0.9, duration: 0.4)
+        ])
+        cape.run(SKAction.repeatForever(flutter))
 
-        return hat
+        return cape
     }
 
     private func makeSunglasses() -> SKNode {

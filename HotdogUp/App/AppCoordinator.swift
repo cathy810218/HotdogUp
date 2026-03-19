@@ -14,9 +14,6 @@ private let window: UIWindow
 private let container: Container
 
 
-private var gameCoordinator: GameCoordinator?
-
-
 init(window: UIWindow, container: Container = .shared) {
 self.window = window
 self.container = container
@@ -24,13 +21,9 @@ self.container = container
 
 
 func start() {
-let nav = UINavigationController()
-window.rootViewController = nav
+let storyboard = UIStoryboard(name: "Main", bundle: nil)
+let menuVC = storyboard.instantiateInitialViewController()!
+window.rootViewController = menuVC
 window.makeKeyAndVisible()
-
-
-let gameCoordinator = GameCoordinator(navigation: nav, container: container)
-self.gameCoordinator = gameCoordinator
-gameCoordinator.start()
 }
 }

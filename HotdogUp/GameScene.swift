@@ -104,7 +104,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     // MARK: - Charged Jump (3-tier system)
 
     private var touchStartTimes: [ObjectIdentifier: TimeInterval] = [:]
-    private let baseJumpImpulse: CGFloat = CGFloat(kMinJumpHeight + 5)
+    private let baseJumpImpulse: CGFloat = CGFloat(kMinJumpHeight)
 
     // Charge bar UI
     private var chargeBarBackground = SKShapeNode()
@@ -116,6 +116,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     // Reward system
     private var currentAccessory: SKSpriteNode?
     private var rewardCount = 0
+
+    // Sauce hit effect
+    private var sauceSplatNodes: [SKNode] = []
+    private var activeSauceEffects = 0
 
     // MARK: - Scene Lifecycle
 
@@ -144,8 +148,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         removeAllChildren()
         paths.removeAll()
         stations.removeAll()
+        sauceSplatNodes.removeAll()
+        activeSauceEffects = 0
 
         setupPaths()
+        setupCounterLabel()
         setupHighestScoreLabel()
         createHotdog()
         createBackground()
@@ -155,8 +162,6 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         score = 0
         reuseCount = 0
         rewardCount = 0
-        currentAccessory = nil
-        scoreLabelNode.text = "0"
 
         gamePaused = false
         isGameOver = false
@@ -310,9 +315,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private func jumpTier(for duration: TimeInterval) -> (multiplier: CGFloat, name: String) {
         let clamped = min(duration, kMaxChargeDuration)
         if clamped >= kJumpTier3Threshold {
-            return (kJumpTier3Multiplier, "1.5x")
+            return (kJumpTier3Multiplier, "2x")
         } else if clamped >= kJumpTier2Threshold {
-            return (kJumpTier2Multiplier, "1.2x")
+            return (kJumpTier2Multiplier, "1.5x")
         } else {
             return (kJumpTier1Multiplier, "1x")
         }
@@ -337,9 +342,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
 
         // Color by tier
         switch tier {
-        case "1.5x":
+        case "2x":
             chargeBarFill.fillColor = .red
-        case "1.2x":
+        case "1.5x":
             chargeBarFill.fillColor = .orange
         default:
             chargeBarFill.fillColor = .green
@@ -393,7 +398,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                 x = randomPoint(min: Int(currentPath.size.width / 2.0),
                                 max: Int(frame.size.width - currentPath.size.width))
             }
-            let y = Int(currentPath.frame.origin.y) + kMinJumpHeight + kPathYIncrement
+            let y = Int(currentPath.frame.origin.y) + kMinJumpHeight + randomYGap()
             let newPath = Path(position: CGPoint(x: x, y: y))
             previousPath = newPath
             newPath.tag = currentPath.tag + 1
@@ -404,6 +409,19 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private func randomPoint(min: Int, max: Int) -> Int {
         guard max >= min else { return min }
         return Int.random(in: min...max)
+    }
+
+    /// Returns a randomized extra Y gap for the next platform.
+    /// ~60% close (1x tap), ~25% medium (1.5x charge), ~15% far (2x charge).
+    private func randomYGap() -> Int {
+        let roll = Int.random(in: 1...100)
+        if roll <= 60 {
+            return kPathYGapClose
+        } else if roll <= 85 {
+            return kPathYGapMedium
+        } else {
+            return kPathYGapFar
+        }
     }
 
     private func reusePath() {
@@ -444,7 +462,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                 if attempts >= kPathMaxAttempts { break }
             }
             guard let last = paths.last else { continue }
-            let y = Int(last.frame.origin.y) + kMinJumpHeight + 30
+            let y = Int(last.frame.origin.y) + kMinJumpHeight + randomYGap()
             path.position = CGPoint(x: x, y: y)
             if let idx = paths.firstIndex(of: path) {
                 paths.remove(at: idx)
@@ -479,10 +497,10 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         guard milestone > rewardCount else { return }
         rewardCount = milestone
 
-        // Pick a random accessory
+        // Award the next accessory in fixed sequence (wraps around)
         let allTypes = Hotdog.AccessoryType.allCases
-        let randomType = allTypes[Int.random(in: 0..<allTypes.count)]
-        hotdog.attachAccessory(randomType)
+        let index = (milestone - 1) % allTypes.count
+        hotdog.attachAccessory(allTypes[index])
 
         // Celebration burst effect
         showRewardCelebration()
@@ -535,9 +553,110 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
         speed = 0
         gameSceneDelegate?.gameSceneDidEnd()
-        isMusicOn = false
+        MusicPlayer.player.pause()
         isUserInteractionEnabled = false
         hotdog.speed = 0
+    }
+
+    // MARK: - Sauce Effect
+
+    private func applySauceEffect(type: StationType) {
+        // Add weight
+        hotdog.physicsBody?.mass += kSauceMassIncrease
+        activeSauceEffects += 1
+
+        // Visual splatter on the hotdog
+        let splat = sauceSplatNode(for: type)
+        splat.zPosition = 4
+        // Random position on the hotdog body
+        let offsetX = CGFloat.random(in: -hotdog.size.width * 0.3...hotdog.size.width * 0.3)
+        let offsetY = CGFloat.random(in: -hotdog.size.height * 0.25...hotdog.size.height * 0.25)
+        splat.position = CGPoint(x: offsetX, y: offsetY)
+        hotdog.addChild(splat)
+        sauceSplatNodes.append(splat)
+
+        // Pop-in animation
+        splat.setScale(0.01)
+        splat.run(SKAction.sequence([
+            SKAction.scale(to: 1.3, duration: 0.1),
+            SKAction.scale(to: 1.0, duration: 0.08)
+        ]))
+
+        // Flash hotdog red briefly
+        hotdog.run(SKAction.sequence([
+            SKAction.colorize(with: .red, colorBlendFactor: 0.5, duration: 0.1),
+            SKAction.colorize(withColorBlendFactor: 0, duration: 0.2)
+        ]))
+
+        // Remove effect after duration
+        let effectIndex = sauceSplatNodes.count - 1
+        run(SKAction.sequence([
+            SKAction.wait(forDuration: kSauceEffectDuration),
+            SKAction.run { [weak self] in
+                self?.removeSauceEffect(splatIndex: effectIndex)
+            }
+        ]))
+    }
+
+    private func removeSauceEffect(splatIndex: Int) {
+        guard activeSauceEffects > 0 else { return }
+        activeSauceEffects -= 1
+
+        // Remove mass
+        if let body = hotdog.physicsBody {
+            let baseMass = UIDevice.current.userInterfaceIdiom == .pad ? kHotdogPadMass : kHotdogDefaultMass
+            body.mass = max(baseMass, body.mass - kSauceMassIncrease)
+        }
+
+        // Fade out and remove the splat visual
+        if splatIndex < sauceSplatNodes.count {
+            let splat = sauceSplatNodes[splatIndex]
+            splat.run(SKAction.sequence([
+                SKAction.fadeOut(withDuration: 0.3),
+                SKAction.removeFromParent()
+            ]))
+        }
+    }
+
+    private func sauceSplatNode(for type: StationType) -> SKNode {
+        let container = SKNode()
+        let color: UIColor
+        switch type {
+        case .ketchup:
+            color = UIColor(red: 0.85, green: 0.1, blue: 0.1, alpha: 0.85)
+        case .wasabi:
+            color = UIColor(red: 0.3, green: 0.7, blue: 0.1, alpha: 0.85)
+        case .water:
+            color = UIColor(red: 0.2, green: 0.5, blue: 0.9, alpha: 0.85)
+        }
+
+        // Main blob
+        let blob = SKShapeNode(ellipseOf: CGSize(width: 14, height: 10))
+        blob.fillColor = color
+        blob.strokeColor = .clear
+        container.addChild(blob)
+
+        // Small drip splashes
+        for _ in 0..<3 {
+            let drip = SKShapeNode(circleOfRadius: CGFloat.random(in: 1.5...3))
+            drip.fillColor = color
+            drip.strokeColor = .clear
+            drip.position = CGPoint(
+                x: CGFloat.random(in: -8...8),
+                y: CGFloat.random(in: -6...6)
+            )
+            container.addChild(drip)
+        }
+
+        return container
+    }
+
+    private func removeAllSauceEffects() {
+        for splat in sauceSplatNodes {
+            splat.removeFromParent()
+        }
+        sauceSplatNodes.removeAll()
+        activeSauceEffects = 0
     }
 
     // MARK: - Game Loop
@@ -625,7 +744,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                         if !currPath.isVisited {
                             score += 1
                             currPath.isVisited = true
-                            checkAndAwardReward()
+                            // checkAndAwardReward()
                         }
                         isLanded = true
                     }
@@ -633,11 +752,20 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             }
         }
 
-        // Sauce hit
+        // Sauce hit — slows hotdog instead of killing it
         if (bodyHas(bodyA, .sauce) || bodyHas(bodyB, .sauce)) && !isGameOver {
             let sauceBody = bodyHas(bodyA, .sauce) ? bodyA : bodyB
-            sauceBody.node?.removeFromParent()
-            gameOver()
+            let sauceNode = sauceBody.node
+            let sauceType: StationType = {
+                if let sauce = sauceNode as? Sauce { return sauce.sauceType }
+                return .ketchup
+            }()
+            sauceNode?.removeFromParent()
+            // Removing the sauce node cancels its actions, including the
+            // reset block that clears isShooting. Reset all stations so
+            // they can fire again on the next cycle.
+            stations.forEach { $0.isShooting = false }
+            applySauceEffect(type: sauceType)
         }
     }
 
@@ -710,9 +838,9 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         label.position = CGPoint(x: hotdog.position.x, y: hotdog.position.y + hotdog.size.height / 2.0 + 10)
 
         switch tierName {
-        case "1.5x":
+        case "2x":
             label.fontColor = .red
-        case "1.2x":
+        case "1.5x":
             label.fontColor = .orange
         default:
             label.fontColor = .green

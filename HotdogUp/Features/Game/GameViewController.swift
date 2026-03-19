@@ -22,6 +22,7 @@ class GameViewController: UIViewController {
     private var pauseBtn = UIButton()
     private var tutorialView = TutorialView()
     private var gameoverView = GameoverView()
+    private var interstitialAdView = InterstitialAdView()
     private var activityIndicator = UIActivityIndicatorView()
 
     private var gameScene: GameScene!
@@ -55,6 +56,7 @@ class GameViewController: UIViewController {
         setupPauseButton()
         setupTutorialView()
         setupActivityIndicator()
+        setupInterstitialAdView()
         bindViewModel()
 
         // Show tutorial on first launch
@@ -87,11 +89,17 @@ class GameViewController: UIViewController {
             self?.presentShareSheet(text: text, image: image)
         }
 
+        viewModel.onShowAd = { [weak self] in
+            self?.interstitialAdView.show()
+        }
+
         viewModel.onIAPCompleted = { [weak self] success in
             self?.activityIndicator.stopAnimating()
             if success {
                 self?.gameoverView.removeAdsBtn.isEnabled = false
                 self?.gameoverView.restoreIAPBtn.isEnabled = false
+                // Hide ad if it was showing when user purchased
+                self?.interstitialAdView.isHidden = true
             } else {
                 // User cancelled or no transaction
                 self?.gameoverView.removeAdsBtn.isEnabled = true
@@ -162,6 +170,16 @@ class GameViewController: UIViewController {
         activityIndicator.snp.makeConstraints { make in
             make.center.equalToSuperview()
         }
+    }
+
+    private func setupInterstitialAdView() {
+        interstitialAdView = InterstitialAdView(frame: view.frame)
+        view.addSubview(interstitialAdView)
+        interstitialAdView.snp.makeConstraints { make in
+            make.edges.equalToSuperview()
+        }
+        interstitialAdView.isHidden = true
+        interstitialAdView.delegate = self
     }
 
     // MARK: - Actions
@@ -346,6 +364,20 @@ extension GameViewController: GameoverViewDelegate {
     func gameoverViewDidPressRestore() {
         activityIndicator.startAnimating()
         Task { await viewModel.restorePurchases() }
+    }
+}
+
+// MARK: - InterstitialAdViewDelegate
+
+extension GameViewController: InterstitialAdViewDelegate {
+
+    func interstitialAdDidPressRemoveAds() {
+        activityIndicator.startAnimating()
+        Task { await viewModel.buyRemoveAds() }
+    }
+
+    func interstitialAdDidDismiss() {
+        // Ad dismissed, game over view is already showing behind it
     }
 }
 

@@ -18,6 +18,7 @@ enum UserDefaultsKey {
     static let doNotShowTutorial = "UserDefaultsDoNotShowTutorialKey"
     static let purchased = "UserDefaultsPurchaseKey"
     static let resumeSpeed = "UserDefaultsResumeSpeedKey"
+    static let deathCount = "UserDefaultsDeathCountKey"
 }
 
 // MARK: - Persistence Protocol

@@ -87,26 +87,39 @@ class GameoverView: UIView {
         }
         shareBtn.addTarget(self, action: #selector(share), for: .touchUpInside)
         
-        removeAdsBtn = UIButton(type: .custom)
+        removeAdsBtn = UIButton(type: .system)
+        removeAdsBtn.setTitle("Remove Ads", for: .normal)
+        removeAdsBtn.titleLabel?.font = UIFont.boldSystemFont(ofSize: 13)
+        removeAdsBtn.setTitleColor(.white, for: .normal)
+        removeAdsBtn.setTitleColor(UIColor(white: 0.5, alpha: 1), for: .disabled)
+        removeAdsBtn.backgroundColor = UIColor(red: 0.2, green: 0.6, blue: 0.3, alpha: 1)
+        removeAdsBtn.layer.cornerRadius = 8
         self.addSubview(removeAdsBtn)
-        removeAdsBtn.setBackgroundImage(UIImage(named: "remove_ads"), for: .normal)
-        removeAdsBtn.snp.makeConstraints({ (make) in
-            make.right.bottom.equalTo(-12)
-            make.width.height.equalTo(50)
-        })
-        removeAdsBtn.addTarget(self, action: #selector(removeAdsPressed), for: .touchUpInside)
-        removeAdsBtn.isEnabled = false
-        
-        restoreIAPBtn = UIButton(type: .custom)
-        self.addSubview(restoreIAPBtn)
-        restoreIAPBtn.setBackgroundImage(UIImage(named: "restore"), for: .normal)
-        restoreIAPBtn.snp.makeConstraints { (make) in
-            make.right.equalTo(removeAdsBtn.snp.left).offset(-12)
+        removeAdsBtn.snp.makeConstraints { make in
+            make.right.equalTo(-12)
             make.bottom.equalTo(-12)
-            make.width.height.equalTo(50)
+            make.width.equalTo(100)
+            make.height.equalTo(36)
+        }
+        removeAdsBtn.addTarget(self, action: #selector(removeAdsPressed), for: .touchUpInside)
+        // TODO: Re-enable when Google AdMob is integrated
+        removeAdsBtn.isHidden = true
+
+        restoreIAPBtn = UIButton(type: .system)
+        restoreIAPBtn.setTitle("Restore", for: .normal)
+        restoreIAPBtn.titleLabel?.font = UIFont.systemFont(ofSize: 13)
+        restoreIAPBtn.setTitleColor(UIColor(white: 0.8, alpha: 1), for: .normal)
+        restoreIAPBtn.setTitleColor(UIColor(white: 0.5, alpha: 1), for: .disabled)
+        self.addSubview(restoreIAPBtn)
+        restoreIAPBtn.snp.makeConstraints { make in
+            make.right.equalTo(removeAdsBtn.snp.left).offset(-8)
+            make.centerY.equalTo(removeAdsBtn)
+            make.width.equalTo(60)
+            make.height.equalTo(36)
         }
         restoreIAPBtn.addTarget(self, action: #selector(restoreIAPPressed), for: .touchUpInside)
-        restoreIAPBtn.isEnabled = false
+        // TODO: Re-enable when Google AdMob is integrated
+        restoreIAPBtn.isHidden = true
     }
     
     required init?(coder aDecoder: NSCoder) {
