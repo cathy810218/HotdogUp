@@ -11,6 +11,7 @@ import SpriteKit
 
 class Sauce: SKSpriteNode {
     let sauceType: StationType
+    weak var ownerStation: Station?
 
     init(type: StationType) {
         self.sauceType = type

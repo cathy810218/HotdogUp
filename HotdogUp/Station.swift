@@ -25,8 +25,8 @@ enum StationType: Int {
     var shootSpeed: TimeInterval {
         switch self {
         case .ketchup: return 4
-        case .wasabi: return 3
-        case .water: return 2
+        case .wasabi: return 3.5
+        case .water: return 3
         }
     }
 }
@@ -40,6 +40,8 @@ class Station: SKSpriteNode {
         }
     }
     var isShooting = false
+    var lastShotTime: TimeInterval = 0
+    private let shootCooldown: TimeInterval = 1.5
     
     init() {
         let stationTexture = SKTexture(imageNamed: stationType.name)
@@ -74,10 +76,14 @@ class Station: SKSpriteNode {
     }
     
     func shootSauce() {
+        let now = CACurrentMediaTime()
+        guard now - lastShotTime >= shootCooldown else { return }
+        lastShotTime = now
         isShooting = true
         let sauce = Sauce(type: stationType)
+        sauce.ownerStation = self
         // spawn sauce in scene coordinate space so it behaves independently
-        sauce.zPosition = -1
+        sauce.zPosition = 35
         sauce.position = self.convert(CGPoint(x: sauce.size.width/2.0 - 5, y: 0), to: self.scene!)
         sauce.physicsBody?.isDynamic = true
         self.scene?.addChild(sauce)

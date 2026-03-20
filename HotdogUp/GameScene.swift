@@ -120,6 +120,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     // Sauce hit effect
     private var sauceSplatNodes: [SKNode] = []
     private var activeSauceEffects = 0
+    private var sauceEffectExpiry: TimeInterval = 0
+    private var sauceTimerLabel: SKLabelNode?
 
     // MARK: - Scene Lifecycle
 
@@ -150,6 +152,8 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         stations.removeAll()
         sauceSplatNodes.removeAll()
         activeSauceEffects = 0
+        sauceEffectExpiry = 0
+        sauceTimerLabel = nil
 
         setupPaths()
         setupCounterLabel()
@@ -384,19 +388,19 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
     private func generatePaths() {
         let samplePath = Path(position: .zero)
         let tx = randomPoint(min: Int(samplePath.size.width / 2.0),
-                             max: Int(frame.size.width - samplePath.size.width))
+                             max: Int(frame.size.width - samplePath.size.width / 2.0))
         var currentPath = Path(position: CGPoint(x: tx, y: kMinJumpHeight))
         paths.append(currentPath)
         var previousPath = currentPath
 
-        for _ in 0...3 {
+        for _ in 0...7 {
             guard let last = paths.last else { continue }
             currentPath = last
             var x = randomPoint(min: Int(currentPath.size.width / 2.0),
-                                max: Int(frame.size.width - currentPath.size.width))
+                                max: Int(frame.size.width - currentPath.size.width / 2.0))
             while abs(Int(previousPath.position.x) - x) > Int(kPathGapMultiplier * currentPath.size.width) {
                 x = randomPoint(min: Int(currentPath.size.width / 2.0),
-                                max: Int(frame.size.width - currentPath.size.width))
+                                max: Int(frame.size.width - currentPath.size.width / 2.0))
             }
             let y = Int(currentPath.frame.origin.y) + kMinJumpHeight + randomYGap()
             let newPath = Path(position: CGPoint(x: x, y: y))
@@ -453,11 +457,11 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             }
 
             var x = randomPoint(min: Int(path.size.width / 2.0),
-                                max: Int(frame.size.width - path.size.width))
+                                max: Int(frame.size.width - path.size.width / 2.0))
             var attempts = 0
             while (paths.last.map { abs(Int($0.position.x) - x) } ?? 0) > Int(kPathGapMultiplier * path.size.width) || x <= minLeft {
                 x = randomPoint(min: Int(path.size.width / 2.0),
-                                max: Int(frame.size.width - path.size.width))
+                                max: Int(frame.size.width - path.size.width / 2.0))
                 attempts += 1
                 if attempts >= kPathMaxAttempts { break }
             }
@@ -588,6 +592,27 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
             SKAction.colorize(withColorBlendFactor: 0, duration: 0.2)
         ]))
 
+        // Floating "+HEAVY" indicator that drifts up and fades
+        let heavyLabel = SKLabelNode(fontNamed: kScoreFontName)
+        heavyLabel.text = "⬇ +HEAVY"
+        heavyLabel.fontSize = 14
+        heavyLabel.fontColor = UIColor(red: 1.0, green: 0.3, blue: 0.3, alpha: 1.0)
+        heavyLabel.zPosition = 51
+        heavyLabel.position = CGPoint(x: hotdog.position.x,
+                                       y: hotdog.position.y + hotdog.size.height / 2.0 + 24)
+        addChild(heavyLabel)
+        heavyLabel.run(SKAction.sequence([
+            SKAction.group([
+                SKAction.moveBy(x: 0, y: 30, duration: 0.8),
+                SKAction.fadeOut(withDuration: 0.8)
+            ]),
+            SKAction.removeFromParent()
+        ]))
+
+        // Track the latest expiry for the countdown timer
+        sauceEffectExpiry = CACurrentMediaTime() + kSauceEffectDuration
+        showSauceTimer()
+
         // Remove effect after duration
         let effectIndex = sauceSplatNodes.count - 1
         run(SKAction.sequence([
@@ -657,6 +682,35 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         }
         sauceSplatNodes.removeAll()
         activeSauceEffects = 0
+        sauceEffectExpiry = 0
+        sauceTimerLabel?.removeFromParent()
+        sauceTimerLabel = nil
+    }
+
+    private func showSauceTimer() {
+        guard sauceTimerLabel == nil else { return }
+        let label = SKLabelNode(fontNamed: kScoreFontName)
+        label.fontSize = 16
+        label.fontColor = .white
+        label.verticalAlignmentMode = .bottom
+        label.zPosition = 50
+        // Position above the hotdog
+        label.position = CGPoint(x: 0, y: hotdog.size.height / 2.0 + 8)
+        hotdog.addChild(label)
+        sauceTimerLabel = label
+    }
+
+    private func updateSauceTimer() {
+        guard let label = sauceTimerLabel else { return }
+        let remaining = sauceEffectExpiry - CACurrentMediaTime()
+        if remaining <= 0 || activeSauceEffects == 0 {
+            label.removeFromParent()
+            sauceTimerLabel = nil
+            return
+        }
+        label.text = String(format: "⬇ %.1fs", remaining)
+        // Keep label readable regardless of hotdog's facing direction
+        label.xScale = hotdog.xScale > 0 ? 1 : -1
     }
 
     // MARK: - Game Loop
@@ -670,6 +724,7 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
                 | ContactCategory.leftbound.rawValue
         }
         reusePath()
+        updateSauceTimer()
 
         if hotdog.position.y < -100 && !isGameOver {
             gameOver()
@@ -756,15 +811,23 @@ class GameScene: SKScene, SKPhysicsContactDelegate {
         if (bodyHas(bodyA, .sauce) || bodyHas(bodyB, .sauce)) && !isGameOver {
             let sauceBody = bodyHas(bodyA, .sauce) ? bodyA : bodyB
             let sauceNode = sauceBody.node
+
+            // Prevent duplicate contacts from the same sauce projectile:
+            // clear its bitmask immediately so no further collisions fire.
+            guard sauceBody.categoryBitMask != 0 else { return }
+            sauceBody.categoryBitMask = 0
+            sauceBody.contactTestBitMask = 0
+
             let sauceType: StationType = {
                 if let sauce = sauceNode as? Sauce { return sauce.sauceType }
                 return .ketchup
             }()
+            // Reset the owning station's isShooting before removing,
+            // since removing the node cancels the action that would reset it.
+            if let sauce = sauceNode as? Sauce {
+                sauce.ownerStation?.isShooting = false
+            }
             sauceNode?.removeFromParent()
-            // Removing the sauce node cancels its actions, including the
-            // reset block that clears isShooting. Reset all stations so
-            // they can fire again on the next cycle.
-            stations.forEach { $0.isShooting = false }
             applySauceEffect(type: sauceType)
         }
     }

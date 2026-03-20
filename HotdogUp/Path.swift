@@ -25,22 +25,51 @@ enum PathType: Int {
         case .fire: return "fire"
         }
     }
+
+    /// Width scale relative to the base texture size.
+    /// Early platforms are wider (easier), later ones shrink.
+    var widthScale: CGFloat {
+        switch self {
+        case .pickle, .onion: return 1.4
+        case .tomato, .mustard: return 1.2
+        case .fire: return 1.0
+        }
+    }
 }
 class Path: SKSpriteNode {
     var isVisited: Bool
     var tag = 0
+    private var baseSize: CGSize = .zero
+
     var type: PathType = PathType.pickle {
         didSet {
-            self.texture = SKTexture(imageNamed: "\(type.name)")
+            let tex = SKTexture(imageNamed: "\(type.name)")
+            self.texture = tex
+            let newSize = CGSize(width: baseSize.width * type.widthScale,
+                                 height: baseSize.height)
+            self.size = newSize
+            self.physicsBody = SKPhysicsBody(rectangleOf: newSize)
+            self.physicsBody?.allowsRotation = false
+            self.physicsBody?.affectedByGravity = false
+            self.physicsBody?.isDynamic = false
+            self.physicsBody?.friction = 1
+            self.physicsBody?.restitution = 0.0
+            self.physicsBody?.categoryBitMask = ContactCategory.path.rawValue
+            self.physicsBody?.contactTestBitMask = ContactCategory.hotdog.rawValue
+            self.physicsBody?.collisionBitMask = ContactCategory.hotdog.rawValue
         }
     }
     
     init(position: CGPoint) {
         let texture = SKTexture(imageNamed: "pickle")
+        let texSize = texture.size()
+        self.baseSize = texSize
         self.isVisited = false
-        super.init(texture: texture, color: UIColor.clear, size: texture.size())
+        let scaledSize = CGSize(width: texSize.width * PathType.pickle.widthScale,
+                                height: texSize.height)
+        super.init(texture: texture, color: UIColor.clear, size: scaledSize)
         self.position = position
-        self.physicsBody = SKPhysicsBody(rectangleOf: self.size)
+        self.physicsBody = SKPhysicsBody(rectangleOf: scaledSize)
         self.physicsBody?.allowsRotation = false
         self.physicsBody?.affectedByGravity = false
         self.physicsBody?.isDynamic = false
